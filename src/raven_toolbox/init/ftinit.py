@@ -569,6 +569,7 @@ def ftinit(
     resolve_ties: bool = False,
     seed: int = _EXTRACT_SEED,
     threads: int = _EXTRACT_THREADS,
+    verbose: bool = False,
 ) -> cobra.Model:
     """Run the full ftINIT pipeline on prepData and return the context-specific model.
 
@@ -636,6 +637,10 @@ def ftinit(
     essential-gene calls, both fully score-optimal — when comparing models before and
     after a curation, apply the edit to the extracted model as a control, not only to the
     template.
+
+    ``verbose`` prints one line per staged step and forwards to :func:`fill_tasks` for
+    per-task gap-fill progress (matching RAVEN ``ftINIT``'s console report); silent by
+    default.
     """
     if metabolomics:
         raise NotImplementedError(
@@ -654,7 +659,10 @@ def ftinit(
     # it is never forced above what it last carried (ftINIT.m:172,248) — this applies to
     # the permanent (prep) essentials too, not only reactions turned on by a prior step.
     flux_of: dict[str, float] = {r.id: force_on for r in min_model.reactions}
+    n_steps = len(steps)
     for i, step in enumerate(steps):
+        if verbose:
+            print(f"[ftinit] step {i + 1}/{n_steps}", flush=True)
         to_zero = prep.masks.ignored(step.ignore_mask)
         scores = group_rxn_scores(min_model, rxn_scores, prep.orig_rxn_ids,
                                   prep.group_ids, to_zero)
@@ -708,10 +716,12 @@ def ftinit(
                          remove_orphans=True)
 
     if fill_gaps and prep.tasks:  # add reactions back so every task is feasible
+        if verbose:
+            print(f"[ftinit] gap-filling {len(prep.tasks)} task(s)", flush=True)
         # The gap-fill MILP is its own problem (RAVEN ftINITFillGaps); it uses RAVEN's
         # fixed per-task 300 s limit and seed, not the main extraction's time_limit.
         out = fill_tasks(out, prep.ref_model, prep.tasks, rxn_scores=rxn_scores,
-                         resolve_ties=resolve_ties).model
+                         resolve_ties=resolve_ties, verbose=verbose).model
     if gene_scores is not None:   # prune negative-scoring genes from the GPRs
         out, _ = remove_low_score_genes(out, gene_scores)
     return out

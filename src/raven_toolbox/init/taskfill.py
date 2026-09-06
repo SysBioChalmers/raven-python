@@ -243,6 +243,7 @@ def fill_tasks(
     time_limit: float | None = _FILL_TIME_LIMIT,
     seed: int = _FILL_SEED,
     resolve_ties: bool = False,
+    verbose: bool = False,
 ) -> TaskFillResult:
     """Add minimum-cost reference reactions so every task is feasible in ``model``.
 
@@ -262,18 +263,25 @@ def fill_tasks(
     model). The returned model keeps its boundary reactions. Tasks that could not be filled
     are returned in ``failed_tasks`` **and** raised as a warning — a non-empty list means the
     context model cannot perform those tasks, which callers should not ignore silently.
+
+    ``verbose`` prints one line per task (added count and running total, matching RAVEN
+    ``ftINITFillGapsForAllTasks``'s per-task report), silent by default.
     """
     scores = dict(rxn_scores or {})
     tasks = list(tasks)
+    n_tasks = len(tasks)
 
     out = model.copy()
     added: list[str] = []
     failed: list[str] = []
-    for task in tasks:
+    for i, task in enumerate(tasks):
         if task.should_fail:
             continue
         name_to_id, comp_to_ids = task_name_maps(out)
         if _feasible(out, task, name_to_id, comp_to_ids):
+            if verbose:
+                print(f"[{i + 1}/{n_tasks}] {task.id}: already feasible, "
+                      f"0 reaction(s) added, {len(added)} total", flush=True)
             continue
         # Candidates are the reference reactions not yet in the (growing) model.
         present = {r.id for r in out.reactions}
@@ -284,10 +292,16 @@ def fill_tasks(
                                     time_limit=time_limit, seed=seed, resolve_ties=resolve_ties)
         except OptimizationError:
             failed.append(task.id)
+            if verbose:
+                print(f"[{i + 1}/{n_tasks}] {task.id}: FAILED to gap-fill, "
+                      f"{len(added)} total", flush=True)
             continue
         if chosen:
             _add_reference_reactions(out, reference_model, chosen)
             added.extend(chosen)
+        if verbose:
+            print(f"[{i + 1}/{n_tasks}] {task.id}: added {len(chosen)} reaction(s), "
+                  f"{len(added)} total", flush=True)
     if failed:
         warnings.warn(
             f"fill_tasks: {len(failed)} task(s) could not be gap-filled and remain "
