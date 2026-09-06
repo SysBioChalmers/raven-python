@@ -213,6 +213,11 @@ def prep_init_model(
 
     ``essential_cache_path`` makes the (slow, genome-scale) essential-reaction discovery
     **resumable** across interruptions — see :func:`find_task_essential_reactions`.
+
+    Task-essential discovery runs with ``close_boundaries=True``, matching RAVEN's
+    ``prepINITModel`` (which calls ``closeModel`` first), rather than
+    :func:`find_task_essential_reactions`'s own additive default — see the comment at the
+    call site for why the two callers differ.
     """
     ref_model = template.copy()
 
@@ -231,7 +236,22 @@ def prep_init_model(
     kept_tasks: list[Task] = []
     if tasks is not None:
         tasks = list(tasks)
-        ess = find_task_essential_reactions(ref_model, tasks, cache_path=essential_cache_path)
+        # close_boundaries=True, against find_task_essential_reactions' own default:
+        # RAVEN's prepINITModel closes the model before this step —
+        #     bModel = closeModel(cModel);
+        #     [~, essentialRxnMat, ...] = checkTasks(bModel, [], true, false, true, taskStruct);
+        # (prepINITModel.m:81-82). closeModel gives every exchange an explicit boundary
+        # metabolite, and checkTasks then zeroes *every* metabolite's balance
+        # (checkTasks.m:63, `model.b=zeros(numel(model.mets),2)`) before re-opening only
+        # the metabolites a task declares as inputs/outputs — so for this step the task
+        # file *is* the whole boundary, not an addition to the model's own open exchanges.
+        # The additive default is right for a standalone check_tasks on a model with no
+        # boundary metabolites (RAVEN warns and leaves exchanges open there), but it is
+        # wrong here: on Human-GEM, whose 1660 exchanges all ship open, it collapses the
+        # task-essential set from ~206 reactions to 1, silently removing the task
+        # constraint from every ftINIT extraction.
+        ess = find_task_essential_reactions(ref_model, tasks, close_boundaries=True,
+                                            cache_path=essential_cache_path)
         essential_pre = ess.reactions
         task_mets = ess.task_metabolites
         kept_tasks = [t for t in tasks if t.id not in ess.failed_tasks]
