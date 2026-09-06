@@ -6,7 +6,7 @@ to per-reaction scores by walking each reaction's GPR: genes joined by **OR**
 **AND** (complexes) with ``complex_scoring`` (default ``min``). Genes missing from
 ``gene_scores`` are *omitted*; a reaction with no genes — or whose genes are all
 missing — gets ``no_gene_score`` (default −2). These reaction scores feed
-:func:`raven_toolbox.init.run_init` and :func:`raven_toolbox.init.ftinit`.
+:func:`raven_toolbox.init.ftinit`.
 
 Upstream — the omics-data → gene-score step (thresholding, expression levels) — lives
 in :mod:`raven_toolbox.omics`; this function takes gene scores as given.

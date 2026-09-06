@@ -22,9 +22,8 @@ Reaction categories (RAVEN's six), by score sign × reversibility:
 * **essential** — forced on (``v ≥ force_on_ess``); no indicator. Assumed already
   oriented irreversible in its forced direction (``prepINITModel`` does this).
 
-Objective: **maximise** ``Σ score·indicator``. Unlike classic INIT
-(:func:`raven_toolbox.init.run_init`), ftINIT does **not** reward production of every
-metabolite — ``prod_weight`` applies only to metabolomics-detected metabolites (not
+Objective: **maximise** ``Σ score·indicator``. ftINIT does **not** reward production of
+every metabolite — ``prod_weight`` applies only to metabolomics-detected metabolites (not
 yet implemented; passing a non-empty ``metabolomics`` argument raises
 ``NotImplementedError``). Connectivity comes solely from the flux gates plus any
 essential reactions. ``allow_excretion`` relaxes ``S·v = 0`` to ``≥ 0``; ``rem_pos_rev``

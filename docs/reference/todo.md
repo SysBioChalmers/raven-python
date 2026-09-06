@@ -67,8 +67,8 @@ instead of from the source, so the fix has to be structural, not just a correcti
     shapes, ordering/tie-breaking, and solver dependence. Rows already known from this repo:
     `check_tasks` (one model reused vs copy-per-task), `reporter_metabolites` (one-sided
     p-value, z-sorted vs RAVEN's two-tailed ordering), `fseof` (abs-slope classifier),
-    `get_elemental_balance` (graded `unknown` class), `run_init` vs `ftinit` score-0
-    semantics, `merge_models` / `add_reactions_from_model` (`name[comp]` matching),
+    `get_elemental_balance` (graded `unknown` class),
+    `merge_models` / `add_reactions_from_model` (`name[comp]` matching),
     `convert_to_irreversible` / `expand_model` (geckopy-derived), `write_yaml_model`
     (`!!omap`, `metaData` first), `diff_models` (order-insensitive grRule logic), plus the
     two the protocol port will surface: `fillGaps` vs the three Python gap-fillers, and
@@ -119,14 +119,15 @@ automatically, so a parity claim cannot fail a build.
   it.)
 * **P1 — Determinism regression tests.** Recent fixes (#76, #83, `c239d2e`) made placement
   and gap-fill deterministic, but no CI test would catch a regression. Add repeated-run
-  identity assertions for `assign_compartments`, `predict_localization`, and
-  `run_init`/`ftinit` on toy models, plus row/column ordering of the built MILPs. The
-  untracked `scripts/determinism_probe.py` / `master_determinism_probe.py` are the starting
-  point.
-* **P1 — Solver-dependent parity job.** Genome-scale (f)tINIT needs Gurobi, which free
-  runners cannot install. A nightly / manually-triggered workflow on a licensed runner that
-  runs the tier-2 checks and reports the Jaccard numbers, so the study documents stop being
-  hand-refreshed.
+  identity assertions for `assign_compartments`, `predict_localization`, and `ftinit` on toy
+  models, plus row/column ordering of the built MILPs. The untracked
+  `scripts/determinism_probe.py` / `master_determinism_probe.py` are the starting point.
+* **P1 — Solver-dependent parity job.** Genome-scale ftINIT needs Gurobi, which free
+  runners cannot install. `.github/workflows/parity-nightly.yml` exists for this but
+  currently has no genome-scale tier-2 test to run — the one it was built around
+  (`tests/parity/test_genome_scale.py`) checked the classic INIT MILP and was removed along
+  with the rest of tINIT. An ftINIT equivalent (baseline + recording script) is still open,
+  for both this job and the small-model `test_set_level.py` it also used to run.
 * **P1 — Promote or delete the 14 untracked scripts** now sitting in `scripts/`
   (`cross_py_on_mat.py`, `full_pipeline_py.py`, `diff_drafts.py`, `export_draft*.py`,
   `export_scope.py`, `param_sweep.py`, `py_mps.py`, `roworder_test.py`, …). Several are

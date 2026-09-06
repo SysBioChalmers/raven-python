@@ -33,32 +33,16 @@ rather than the model.
 
 ### Tier 2 — set-level
 
-Mixed-integer results: INIT/ftINIT extraction, gap-filling, compartment
-assignment. These problems have many optima of equal objective value, so a
-different answer is not a wrong answer. What can be checked is *drift*: today's
-result against the result that was last inspected and accepted.
+Mixed-integer results: ftINIT extraction, gap-filling, compartment assignment.
+These problems have many optima of equal objective value, so a different
+answer is not a wrong answer. What can be checked is *drift*: today's result
+against the result that was last inspected and accepted.
 
-`test_set_level.py` does that against a baseline recorded by
-`scripts/parity/record_baseline.py`. When a change is expected to move the
-extraction, read the diff the failure prints, re-record, and say in the pull
-request why it moved:
-
-```bash
-python scripts/parity/record_baseline.py    # uses $RAVEN_ROOT
-```
-
-That baseline asserts **exact** set equality rather than an overlap band,
-because it was measured rather than assumed: on this fixture GLPK and Gurobi
-return the same 13 reactions, and each is identical across repeated runs. A
-difference therefore means this package changed, not that the solver picked
-another optimum. On a fixture where the solvers genuinely disagree, the honest
-form is a band with a measured floor — not a loosened threshold on this one.
-
-The baseline is seeded from raven-toolbox itself, which makes it a regression
-guard rather than a cross-language check. Its `source` field records that, and
-the test prints it on failure so the two are not confused. Extending
-`generate_oracles.m` with an extraction oracle turns the same comparison into a
-real parity check.
+Nothing currently records an ftINIT extraction baseline this way — the tier-2
+extraction check that used to live here compared the classic INIT MILP
+(`run_init`) against a recorded baseline, and was removed along with the rest
+of that MILP. An ftINIT equivalent (baseline + recording script, on the same
+pattern) is open work; see `docs/reference/todo.md`.
 
 ### Tier 3 — statistical
 
@@ -116,12 +100,12 @@ It lives here because it protects the same property the parity tiers do.
 
 - Every RAVEN-authored model loads and round-trips without losing RAVEN's own
   fields (tier 1).
-- The small-model extraction has not drifted from its recorded baseline
-  (tier 2).
 - The deterministic paths return the same answer twice.
 
 Still only *reported*, not enforced: the genome-scale Human-GEM, yeast and
-multi-organism comparisons in `docs/studies/`. They need Gurobi and models too
-large for a free runner, so closing that gap needs a nightly job on a licensed
-runner — the next piece of this harness. Tier 3 has a stated contract and no
-tests yet for the same reason.
+multi-organism comparisons in `docs/studies/`, and any small-model extraction
+drift check (tier 2) — both used to be covered by `run_init`-based tests that
+were removed with the rest of the classic INIT MILP. `.github/workflows/parity-nightly.yml`
+still exists to run a licensed-runner genome-scale check but currently has
+nothing genome-scale to run; see `docs/reference/todo.md`. Tier 3 has a stated
+contract and no tests yet for the same reason.

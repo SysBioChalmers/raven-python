@@ -1,25 +1,19 @@
-# Context-specific modeling (tINIT / ftINIT)
+# Context-specific modeling (ftINIT)
 
 Extract a tissue- or condition-specific model from a reference GEM plus gene scores derived
-from omics data. Two algorithms are provided in {mod}`raven_toolbox.init`.
+from omics data, with {mod}`raven_toolbox.init`.
 
 ## Scoring
 
-Gene scores drive both algorithms. Build them from expression with
+Gene scores drive the extraction. Build them from expression with
 {func}`raven_toolbox.init.gene_scores_from_expression` and turn them into reaction scores via
 {func}`raven_toolbox.init.score_reactions_from_genes` (a GPR walk shared with the omics
 adapters — see the [omics guide](omics.md)).
 
-## tINIT
-
-- {func}`raven_toolbox.init.run_init` — the classic INIT MILP (rewritten in optlang).
-- {func}`raven_toolbox.init.get_init_model` — the full tINIT pipeline (dead-end removal →
-  `run_init`).
-
-## ftINIT (faster, staged)
+## ftINIT
 
 - {func}`raven_toolbox.init.run_ftinit` — the single-step ftINIT MILP (continuous indicators
-  for positive-score reactions; binaries only on negatives — the speedup over `run_init`).
+  for positive-score reactions; binaries only on negatives).
 - {func}`raven_toolbox.init.ftinit` — the full pipeline:
   {func}`raven_toolbox.init.prep_init_model` → staged `run_ftinit` →
   {func}`raven_toolbox.init.fill_tasks` → {func}`raven_toolbox.init.remove_low_score_genes`.
@@ -31,7 +25,7 @@ ftINIT's task layer keeps essential metabolic tasks feasible; define and check t
 `force_on`, `eps`, `prod_weight`, scaling) and their robustness to noisy input are calibrated
 in the
 [INIT parameter calibration study](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/init-param-calibration.md),
-and the equivalence to MATLAB RAVEN is established in the
+and the equivalence to MATLAB RAVEN's ftINIT is established in the
 [Human-GEM validation](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/humangem-validation.md)
 (both on raven-docs).
 
@@ -49,9 +43,16 @@ Measurements in the
 zero-cost lever for run-to-run identity.
 
 :::{important}
-Genome-scale (f)tINIT MILPs currently require **Gurobi** for tractable solve times; toy and
+Genome-scale ftINIT MILPs currently require **Gurobi** for tractable solve times; toy and
 unit-test problems run on GLPK. See the
 [INIT solver benchmark](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/init-solver-benchmark.md)
 (raven-docs). Metabolomics-based scoring is the one piece not yet implemented (raises
 `NotImplementedError`).
+:::
+
+:::{note}
+MATLAB RAVEN also ships `getINITModel`/`runINIT`, the original tINIT algorithm ftINIT
+superseded — kept there for backwards compatibility and reproducing older models. raven-toolbox
+is a new implementation with no such installed base to carry forward, so it implements only
+ftINIT.
 :::
