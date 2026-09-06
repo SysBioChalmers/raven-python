@@ -8,8 +8,19 @@ constructing the :class:`pandas.DataFrame` directly.
 
 Predictors label compartments with their own names (``Mitochondrion``, ``Cytoplasm``, …).
 Pass ``compartment_map`` (e.g. :data:`DEFAULT_COMPARTMENT_MAP`) to rename them to your model's
-compartment ids and collapse synonyms; labels absent from the map are dropped. Without a map the
-predictor's own labels are kept (use :meth:`LocalizationScores.with_compartments` to rename later).
+compartment ids. Three consequences worth knowing:
+
+* A label absent from the map is dropped with its whole column, which is how compartments the
+  model does not have are excluded. Without a map the predictor's own labels are kept (use
+  :meth:`LocalizationScores.with_compartments` to rename later).
+* Several labels may share one compartment id, which merges their columns by taking the
+  **maximum** per gene, not the sum: a gene scoring 0.7 cytoplasm and 0.4 cytosol scores 0.7
+  for ``c``. Use it for synonyms and for collapsing compartments the model does not separate.
+* One label cannot be split across two compartment ids — a mapping holds one value per key. Do
+  it on the resulting frame instead, e.g. ``scores.df["v"] = scores.df["g"]`` to let a gene
+  predicted Golgi compete for both. The columns are then independent, and
+  :func:`raven_toolbox.localization.predict_localization` picks whichever placement keeps the
+  network better connected.
 
 Each loader normalises every gene's row so the best compartment is 1.0 (RAVEN's ``parseScores``
 convention), which lets transport costs be set on a comparable scale.
