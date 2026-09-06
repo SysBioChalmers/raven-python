@@ -7,6 +7,7 @@
 * :func:`walk_fluxes` / :class:`FluxWalker` — interactive flux-network navigation.
 * :func:`get_min_nr_fluxes` — minimum-cardinality flux distribution (big-M MILP).
 * :func:`compare_fluxes` — reactions whose flux changed between two conditions.
+* :func:`trace_flux_path` — highest-flux-fraction path between two reactions.
 """
 from raven_toolbox.analysis.compare_fluxes import CompareFluxesResult, compare_fluxes
 from raven_toolbox.analysis.flux_sampling import (
@@ -20,6 +21,11 @@ from raven_toolbox.analysis.sampling import (
     RandomSamplingResult,
     find_good_reactions,
     random_sampling,
+)
+from raven_toolbox.analysis.trace_flux_path import (
+    TraceFluxPathResult,
+    print_flux_path,
+    trace_flux_path,
 )
 from raven_toolbox.analysis.walk import (
     FluxWalker,
@@ -38,12 +44,15 @@ __all__ = [
     "NeighborReaction",
     "RandomSamplingResult",
     "ReporterResult",
+    "TraceFluxPathResult",
     "compare_fluxes",
     "find_good_reactions",
     "fseof",
     "get_min_nr_fluxes",
     "max_volume_ellipsoid",
+    "print_flux_path",
     "random_sampling",
     "reporter_metabolites",
+    "trace_flux_path",
     "walk_fluxes",
 ]
