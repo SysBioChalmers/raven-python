@@ -16,6 +16,7 @@ in reverse, yield no path.
 """
 from __future__ import annotations
 
+import heapq
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -167,13 +168,19 @@ def trace_flux_path(
     best_at_node = {r.id: 0.0 for r in model.reactions}
     best_at_node[from_rxn] = 1.0
 
-    queue: list[dict] = [{"rxn": from_rxn, "frac": 1.0, "rpath": [from_rxn], "mpath": []}]
+    # Best-first by frac (descending). A min-heap keyed on -frac with a tie-breaking
+    # counter reproduces the same pop order (highest frac first, FIFO among ties) as
+    # the previous sorted-insert list, in O(log n) per push/pop instead of O(n).
+    _counter = 0
+    heap: list[tuple[float, int, dict]] = [
+        (-1.0, _counter, {"rxn": from_rxn, "frac": 1.0, "rpath": [from_rxn], "mpath": []})
+    ]
     best_frac = 0.0
     best_rpath: list[str] = []
     best_mpath: list[str] = []
 
-    while queue:
-        entry = queue.pop(0)
+    while heap:
+        _, _, entry = heapq.heappop(heap)
         cur, frac, rpath, mpath = entry["rxn"], entry["frac"], entry["rpath"], entry["mpath"]
 
         if cur == to_rxn:
@@ -221,8 +228,8 @@ def trace_flux_path(
                         "rpath": [*rpath, consumer.id],
                         "mpath": [*mpath, met.id],
                     }
-                    pos = next((i for i, e in enumerate(queue) if e["frac"] < new_frac), len(queue))
-                    queue.insert(pos, new_entry)
+                    _counter += 1
+                    heapq.heappush(heap, (-new_frac, _counter, new_entry))
 
     return TraceFluxPathResult(
         reactions=best_rpath,

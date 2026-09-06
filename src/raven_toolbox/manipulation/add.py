@@ -312,13 +312,15 @@ def add_reactions_from_equations(
 
     known_genes = {gene.id for gene in model.genes}
     added: list[Reaction] = []
+    pending_coeffs: list[dict[Metabolite, float]] = []
+    pending_ids: set[str] = set()
     met_index = _build_met_index(model)
 
     for spec in reactions:
         if "id" not in spec:
             raise ValueError(f"Reaction spec missing required 'id': {spec!r}")
         rxn_id = spec["id"]
-        if rxn_id in model.reactions:
+        if rxn_id in model.reactions or rxn_id in pending_ids:
             raise ValueError(
                 f"Reaction {rxn_id!r} already exists. To change its stoichiometry use "
                 "change_reaction_equations; to replace it, remove it first with "
@@ -347,7 +349,13 @@ def add_reactions_from_equations(
         if "subsystem" in spec:
             rxn.subsystem = subsystem_to_str(spec["subsystem"])
 
-        model.add_reactions([rxn])
+        pending_ids.add(rxn_id)
+        pending_coeffs.append(coeffs)
+        added.append(rxn)
+
+    model.add_reactions(added)  # one batch — per-reaction adds are super-linear at scale
+
+    for spec, rxn, coeffs in zip(reactions, added, pending_coeffs, strict=True):
         rxn.add_metabolites(coeffs)
 
         rule = spec.get("gene_reaction_rule", "")
@@ -356,12 +364,10 @@ def add_reactions_from_equations(
                 missing = sorted(set(GPR.from_string(rule).genes) - known_genes)
                 if missing:
                     raise ValueError(
-                        f"Reaction {rxn_id!r} references genes not in the model: "
+                        f"Reaction {rxn.id!r} references genes not in the model: "
                         f"{missing}. Set allow_new_genes=True or add them first."
                     )
             rxn.gene_reaction_rule = rule
             known_genes.update(gene.id for gene in rxn.genes)
-
-        added.append(rxn)
 
     return added
