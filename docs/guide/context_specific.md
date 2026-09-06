@@ -41,9 +41,14 @@ returned, making repeated builds identical and halving the seed-to-seed spread i
 essential genes. `prove_abs_gap=1.0` proves each step to a fixed absolute MIP gap; it is worth
 setting because the default gap escalation returns a measurably **suboptimal** extraction. Do
 not set it tighter — below ~1.0 it stops being provable at genome scale and returns the same
-model anyway. Neither makes the extraction *stable* under a curated template: re-extraction can
-move genes unrelated to the edit, so compare against the edit applied to the extracted model.
-Measurements in the
+model anyway. Neither makes the extraction *stable* under a curated template: a re-extraction
+can move genes unrelated to the edit, because the MILP re-selects globally over the whole
+network. A `reference_reactions` parameter that anchored a re-extraction to a prior build's
+choices was implemented and tested against this exact problem — it helped on one cell line
+and caused a 5× *increase* in spurious drift on another, and was removed; see the
+[`reference_reactions` postmortem](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/ftinit-reference-reactions.md)
+for why anchoring reaction identity doesn't reliably fix this. Measurements for `resolve_ties`/
+`prove_abs_gap` in the
 [ftINIT reproducibility study](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/ftinit-determinism.md)
 (raven-docs). Pinning the solver stack (raven-toolbox commit + `gurobipy` version) remains the
 zero-cost lever for run-to-run identity.
