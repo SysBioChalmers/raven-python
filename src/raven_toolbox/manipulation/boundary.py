@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import cobra
 
+
 def _is_boundary_reaction(rxn: cobra.Reaction) -> bool:
     """Whether ``rxn`` has metabolites on only one side (RAVEN's rule, matching ``getExchangeRxns``)."""
     coeffs = list(rxn.metabolites.values())
