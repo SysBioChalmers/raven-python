@@ -161,6 +161,64 @@ def test_essential_merged_away_is_skipped():
     assert "REV" not in prep.essential_rxns  # merged into a collapsed group
 
 
+def test_prep_closes_boundaries_for_task_essentials():
+    """prep_init_model must close boundaries for essential discovery, as RAVEN does.
+
+    RAVEN's ``prepINITModel`` runs ``checkTasks`` on ``closeModel(cModel)``
+    (prepINITModel.m:81-82), and ``checkTasks`` zeroes every metabolite's balance
+    (checkTasks.m:63) before re-opening only what a task declares — so for this step the
+    task file *is* the whole boundary. ``find_task_essential_reactions``' own default is
+    additive (right for a standalone check on a model with no boundary metabolites), and
+    prep must not inherit it: on Human-GEM, whose exchanges all ship open, that collapsed
+    the task-essential set from ~206 reactions to 1 and silently removed the task
+    constraint from every extraction.
+
+    The task is "make b from a". CONV (a→b) is the only route from the task's declared
+    input, but the model also ships an open exchange for c, which ALT (c→b) turns into b
+    without touching a. Additively that un-declared exchange satisfies the task, so neither
+    route is essential; with the boundary closed, only a is available and CONV becomes
+    essential. The toy oracles elsewhere in this file agree under both readings, which is
+    why this regression went unnoticed.
+    """
+    import cobra
+
+    from raven_toolbox.tasks import Task, find_task_essential_reactions
+
+    m = cobra.Model("bypass")
+    a, b, c = (cobra.Metabolite(x, name=x, compartment="s") for x in "abc")
+    m.add_metabolites([a, b, c])
+
+    conv = cobra.Reaction("CONV", lower_bound=0, upper_bound=1000)   # a -> b
+    conv.add_metabolites({a: -1, b: 1})
+    conv.gene_reaction_rule = "g1"
+    alt = cobra.Reaction("ALT", lower_bound=0, upper_bound=1000)     # c -> b, the bypass
+    alt.add_metabolites({c: -1, b: 1})
+    alt.gene_reaction_rule = "g2"
+    exchanges = []
+    for met in (a, b, c):
+        ex = cobra.Reaction(f"EX_{met.id}", lower_bound=-1000, upper_bound=1000)
+        ex.add_metabolites({met: -1})
+        exchanges.append(ex)
+    m.add_reactions([conv, alt, *exchanges])
+
+    task = Task(id="mk_b", inputs=[("a[s]", 0.0, 1000.0)], outputs=[("b[s]", 1.0, 1.0)])
+
+    # The discriminating fact, at the level the bug actually lives (no merging involved).
+    additive = find_task_essential_reactions(m, [task], close_boundaries=False).reactions
+    closed = find_task_essential_reactions(m, [task], close_boundaries=True).reactions
+    assert "CONV" not in additive, "the un-declared EX_c bypass hides CONV additively"
+    assert "CONV" in closed, "with the boundary closed, CONV is the only route from a"
+
+    # prep must take the closed reading. Essentials are reported on merged ids (CONV can
+    # merge with EX_a into one linear group), so assert the set is non-empty rather than
+    # naming CONV itself — under the additive reading it would be empty.
+    prep = prep_init_model(m, [task], ext_comp="s", simplify=False)
+    assert prep.essential_rxns, (
+        "prep_init_model found no task-essential reactions; it is using the additive "
+        "boundary reading instead of RAVEN's prepINITModel closed one"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # prove_abs_gap / resolve_ties (deterministic extraction).
 # These are opt-in; the default path stays exact-RAVEN. On the toy oracle they must

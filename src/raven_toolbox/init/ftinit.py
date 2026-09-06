@@ -637,6 +637,15 @@ def ftinit(
     essential-gene calls, both fully score-optimal — when comparing models before and
     after a curation, apply the edit to the extracted model as a control, not only to the
     template.
+
+    A stability-anchoring parameter (``reference_reactions``, biasing a re-extraction
+    toward a prior build's reaction choices) was implemented and tested against a real
+    curation here; it helped on one cell line and caused a 5x *increase* in spurious
+    essential-gene drift on another, traced to a network-topology regime swap the
+    reference-matching objective cannot see coming, and was removed. See the
+    `reference_reactions postmortem
+    <https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/ftinit-reference-reactions.md>`_
+    on raven-docs for the full account.
     """
     if metabolomics:
         raise NotImplementedError(
