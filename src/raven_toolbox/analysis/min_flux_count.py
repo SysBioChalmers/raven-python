@@ -149,12 +149,18 @@ def get_min_nr_fluxes(
         model.add_cons_vars([*indicators, *extra_cons])
         model.objective = prob.Objective(sum(obj_terms), direction="min")
 
-        solution = model.optimize()
+        # slim_optimize only reads the objective value, so it is safe to call on an
+        # infeasible model; model.optimize() builds a full Solution by reading every
+        # reaction's primal value from the solver, which Gurobi refuses to expose for
+        # an infeasible problem (raising GurobiError instead of the empty result this
+        # branch is supposed to return) -- so the status must be checked first.
+        model.slim_optimize()
         status = model.solver.status
 
         if status != "optimal":
             return MinNrFluxesResult(fluxes=pd.Series(dtype=float), active=[], status=status)
 
+        solution = model.optimize()
         fluxes = solution.fluxes
         active = [rid for rid, y in zip(ids, indicators, strict=True)
                   if (y.primal or 0.0) > _ACTIVE_THRESHOLD]
