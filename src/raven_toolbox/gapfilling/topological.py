@@ -204,18 +204,21 @@ def analyse_topology(
                 all_template_rxns[rxn.id] = rxn
 
     total_template = len(all_template_rxns)
+
+    # Reverse index built once (O(template size)): met id -> template reactions that
+    # produce it, instead of rescanning every template reaction per blocked metabolite.
+    producer_index: dict[str, list[str]] = defaultdict(list)
+    for rxn_id, rxn in all_template_rxns.items():
+        for m, c in rxn.metabolites.items():
+            # Forward production (c > 0) or reverse production (c < 0, reversible)
+            if c > 0 or (c < 0 and rxn.lower_bound < 0):
+                producer_index[m.id].append(rxn_id)
+
     candidate_rxns: dict[str, list[str]] = {}
     all_candidates: set[str] = set()
 
     for met_id in blocked:
-        cands: list[str] = []
-        for rxn_id, rxn in all_template_rxns.items():
-            for m, c in rxn.metabolites.items():
-                if m.id == met_id:
-                    # Forward production (c > 0) or reverse production (c < 0, reversible)
-                    if c > 0 or (c < 0 and rxn.lower_bound < 0):
-                        cands.append(rxn_id)
-                    break
+        cands = producer_index.get(met_id, [])
         candidate_rxns[met_id] = cands
         all_candidates.update(cands)
 

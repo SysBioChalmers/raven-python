@@ -193,13 +193,17 @@ def copy_to_compartment(
 
     preexisting_met_ids = {x.id for x in out.metabolites}
     new_rxn_ids: list[str] = []
+    new_reactions: list[cobra.Reaction] = []
+    to_delete: list[str] = []
+    seen_new_ids: set[str] = set()
     for rid in list(reactions):
         if rid not in out.reactions:
             raise ValueError(f"reaction {rid!r} not in model")
         src = out.reactions.get_by_id(rid)
         new_id = f"{rid}_{suffix}"
-        if new_id in out.reactions:
+        if new_id in out.reactions or new_id in seen_new_ids:
             continue  # already copied; idempotent
+        seen_new_ids.add(new_id)
         new_stoich: dict[cobra.Metabolite, float] = {}
         for m, coeff in src.metabolites.items():
             target_met = _met_in_compartment(out, m, target_compartment, suffix=suffix)
@@ -211,10 +215,14 @@ def copy_to_compartment(
         if src.subsystem:
             new_r.subsystem = src.subsystem
         new_r.notes = dict(src.notes or {})
-        out.add_reactions([new_r])
+        new_reactions.append(new_r)
         new_rxn_ids.append(new_id)
         if delete_original:
-            out.remove_reactions([src.id], remove_orphans=False)
+            to_delete.append(src.id)
+
+    out.add_reactions(new_reactions)  # one batch — per-reaction adds are super-linear at scale
+    if to_delete:
+        out.remove_reactions(to_delete, remove_orphans=False)
 
     new_met_ids = [m.id for m in out.metabolites if m.id not in preexisting_met_ids]
     return out, new_rxn_ids, new_met_ids

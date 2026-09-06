@@ -335,6 +335,7 @@ def find_task_essential_reactions(
     *,
     close_boundaries: bool = False,
     cache_path: str | Path | None = None,
+    checkpoint_every: int = 10,
 ) -> EssentialReactionsResult:
     """Find the reactions a model must use to satisfy a task list.
 
@@ -353,9 +354,14 @@ def find_task_essential_reactions(
     the discovered essential set — is reproducible.
 
     On a genome-scale model this is slow (a min-flux solve plus a feasibility LP per
-    candidate, per task). Pass ``cache_path`` to make it **resumable**: each task's result
-    is written there as it completes (atomically), and a re-run skips tasks already cached —
-    so it survives interruptions across sessions.
+    candidate, per task). Pass ``cache_path`` to make it **resumable**: the accumulated
+    results are written there (atomically) every ``checkpoint_every`` tasks and once more
+    after the last one, and a re-run skips tasks already cached — so it survives
+    interruptions across sessions. Re-serializing the whole accumulated result after every
+    single task would make total checkpoint I/O grow quadratically in the task count;
+    ``checkpoint_every`` trades a little resumability granularity (at most that many
+    completed tasks are redone after an interruption) for checkpoint I/O that scales
+    with ``n_tasks / checkpoint_every`` instead.
     """
     tasks = _as_tasks(tasks)
     base, name_to_id, comp_to_ids = _prepare_base(model, close_boundaries)
@@ -376,7 +382,21 @@ def find_task_essential_reactions(
             task_metabolites = set(cached["mets"])
             failed_index = list(cached["failed"])
 
+    def write_checkpoint() -> None:
+        assert cache_path is not None  # only called when a cache_path was given
+        # The handle must be closed *before* the rename, not merely dropped: a
+        # buffered write is only guaranteed flushed on close, and on Windows
+        # renaming a file that still has an open handle raises PermissionError.
+        # Passing open() straight into pickle.dump left that to refcount timing —
+        # it happens to work on CPython, and emitted a ResourceWarning per task.
+        tmp = Path(f"{cache_path}.part")
+        with open(tmp, "wb") as fh:
+            pickle.dump({"per_index": per_index, "mets": task_metabolites,
+                         "failed": failed_index}, fh)
+        tmp.replace(cache_path)
+
     done = set(per_index) | set(failed_index)
+    since_checkpoint = 0
     for i, task in enumerate(tasks):
         if task.should_fail or i in done:
             continue  # a should-fail task defines no essentials; cached ones are skipped
@@ -390,17 +410,13 @@ def find_task_essential_reactions(
                 per_index[i] = _task_essential_reactions(task_model, original_ids)
             except OptimizationError:
                 failed_index.append(i)
-        if cache_path is not None:  # atomic checkpoint after each task
-            # The handle must be closed *before* the rename, not merely dropped: a
-            # buffered write is only guaranteed flushed on close, and on Windows
-            # renaming a file that still has an open handle raises PermissionError.
-            # Passing open() straight into pickle.dump left that to refcount timing —
-            # it happens to work on CPython, and emitted a ResourceWarning per task.
-            tmp = Path(f"{cache_path}.part")
-            with open(tmp, "wb") as fh:
-                pickle.dump({"per_index": per_index, "mets": task_metabolites,
-                             "failed": failed_index}, fh)
-            tmp.replace(cache_path)
+        if cache_path is not None:
+            since_checkpoint += 1
+            if since_checkpoint >= checkpoint_every:
+                write_checkpoint()
+                since_checkpoint = 0
+    if cache_path is not None and since_checkpoint:  # flush any tail not yet checkpointed
+        write_checkpoint()
 
     # Majority direction across *all* tasks; tie (sum == 0) → forward, as RAVEN's `pos < neg`.
     direction_votes: dict[str, int] = {}
