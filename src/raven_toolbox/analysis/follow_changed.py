@@ -1,13 +1,18 @@
-"""Reactions whose flux changed from a reference case — port of RAVEN's ``followChanged``.
+"""Reactions whose flux changed from a reference case.
 
 Compares two flux distributions and reports reactions whose flux both (a)
 clears an absolute-value floor in either case, (b) differs from the
 reference by at least a fixed absolute amount, and (c) differs by at least
 a relative percentage — all three cutoffs must pass; none alone is
 sufficient. Optionally restricted to reactions touching a given list of
-metabolite *names* (matching ``followChanged.m``'s own name-based, not
-id-based, lookup — RAVEN's own source flags this as questionable itself:
-``%Should use id maybe``).
+metabolite *names* (matched case-insensitively; a name is looked up against
+``Metabolite.name``, not the id).
+
+This began as a port of RAVEN's ``followChanged``, which RAVEN has since
+removed in favour of ``compareFluxes``. The two are not interchangeable:
+``compareFluxes`` applies a single cutoff and labels reactions as turned on,
+turned off or reversed, where this applies three independent cutoffs and
+does not classify. There is no ``compare_fluxes`` here yet.
 """
 from __future__ import annotations
 
@@ -34,7 +39,7 @@ class ChangedReaction:
 
 @dataclass
 class FollowChangedResult:
-    """Outcome of a followChanged comparison.
+    """Outcome of a :func:`follow_changed` comparison.
 
     Parameters
     ----------
@@ -149,10 +154,8 @@ def print_changed_fluxes(
 ) -> FollowChangedResult:
     """Print :func:`follow_changed`'s result and return it.
 
-    A simpler, Pythonic rendering of ``followChanged.m``'s console report —
-    not a literal reproduction of its text (see the module docstring's
-    parity note on text formatting in general); the structured result is
-    what's compared for parity.
+    One reaction per block: id, equation, name, then the two fluxes and their
+    difference. Unmatched metabolite names are reported first.
     """
     result = follow_changed(model, fluxes_a, fluxes_b, **kwargs)
     for name in result.missing_metabolites:

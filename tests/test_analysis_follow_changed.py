@@ -1,4 +1,4 @@
-"""Tests for follow_changed (analysis/follow_changed.py, followChanged port)."""
+"""Tests for follow_changed (analysis/follow_changed.py)."""
 import cobra
 import pandas as pd
 import pytest

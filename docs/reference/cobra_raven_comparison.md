@@ -494,8 +494,7 @@ specialised areas and their absence reflects RAVEN's focus on single-organism re
 | `getAllSubGraphs` | Identifies metabolite connectivity subgraphs (connected components) |
 | `traceFluxPath` | Traces the carbon/flux path between two reactions via metabolite producers/consumers |
 | `compareFluxes` | Diffs two flux distributions; reports turned-on, turned-off, flipped, and changed reactions |
-| `followFluxes` | Interactive command-line exploration of a flux distribution |
-| `followChanged` | Displays the reactions that changed most between two conditions |
+| `walkFluxes` | Interactive command-line exploration of a flux distribution |
 
 ### COBRA
 

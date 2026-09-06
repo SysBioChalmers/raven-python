@@ -39,7 +39,7 @@ standard plus the geckopy enzyme-constrained extension, so ecModels round-trip.
 | `expandModel` | ✅ [`manipulation.expand_model`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/manipulation/expand.py) | Splits OR-GPR (isozyme) reactions into one per AND-clause. Adopted from geckopy. |
 | `mergeCompartments` | ✅ [`manipulation.merge_compartments`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/manipulation/compartments.py) | Collapse a multi-compartment model into one; deduplicate identical reactions; optionally drop one-met collapses (`drop_single_metabolite_reactions`). |
 | `copyToComps` | ✅ [`manipulation.copy_to_compartment`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/manipulation/compartments.py) | Duplicate reactions into a target compartment (idempotent; `delete_original=True` makes it a move). |
-| `mapCompartments` | ⛔ not ported | Overlaps with `comparison.compare_models` on the reaction-id intersection. |
+| `mapCompartments` | ⛔ not ported | Merged predictor compartment columns before `predictLocalization`. Removed from RAVEN; the `compartment_map` argument on the localization scorers covers it. |
 | `getElementalBalance` | ✅ [`utils.get_elemental_balance`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/utils/balance.py) | Graded `balanced` / `unbalanced` / `unknown` — `unknown` catches a missing formula that cobra's `check_mass_balance` silently miscounts. |
 | `checkModelStruct` (curation subset) | ✅ [`utils.check_model`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/utils/validate.py) | Structured curation report. RAVEN's struct/type checks are moot in cobra. |
 | `is_dnf` / GPR check (from `standardizeGrRules`) | ✅ [`utils.is_dnf`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/utils/gpr.py), `find_non_dnf_grrules` | Lint-only half; cobra auto-normalises GPRs on assignment, so the rewriting half isn't ported. |
@@ -109,7 +109,6 @@ standard plus the geckopy enzyme-constrained extension, so ecModels round-trip.
 * **`runDynamicFBA`** — see Omics/analysis row.
 * **`getMetaCycModelForOrganism`** — see Reconstruction row; flagged for upstream removal.
 * **`getPhylDist` per-organism HMM subsampling** — fixed prok90/euk90 libraries make it moot (the distance matrix itself **is** ported, as `reconstruction.kegg.phyl_dist`, for GECKO).
-* **`mapCompartments`** — overlaps with `compare_models`.
 * **`editMiriam`, `extractMiriam`, `getRxnsInComp`, `getMetsInComp`, `constructEquations`, `getIndexes`** (most), **`setExchangeBounds`**, **most `setParam` modes**, **`getBlastFromExcel` Excel branch** — cobra one-liners; recorded above.
 
 ## "New in raven-toolbox" entry points
