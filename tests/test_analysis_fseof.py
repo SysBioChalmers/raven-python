@@ -70,6 +70,17 @@ def test_gene_targets_aggregation(model):
     assert "v2" in gB["reactions"]
 
 
+def test_min_target_overrides_default_floor(model):
+    """``min_target`` replaces the default ``target_max / n_steps`` floor,
+    letting a caller anchor the scan's low end elsewhere (e.g. at a
+    growth-optimal target flux) while the ceiling stays the same."""
+    default_res = fseof(model, "EX_P", n_steps=4)
+    custom_res = fseof(model, "EX_P", n_steps=4, min_target=0.0)
+    assert custom_res.enforced[0] == pytest.approx(0.0)
+    assert custom_res.enforced[0] < default_res.enforced[0]
+    assert custom_res.enforced[-1] == pytest.approx(default_res.enforced[-1])
+
+
 def test_unproducible_target_raises(model):
     # A reaction that cannot carry positive flux is not a valid product target.
     dead = cobra.Reaction("dead", lower_bound=0, upper_bound=0)
