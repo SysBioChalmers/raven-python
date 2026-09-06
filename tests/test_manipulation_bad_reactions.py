@@ -71,9 +71,12 @@ def test_rxn_rules_1_ignores_a_reaction_with_no_formula():
 
 
 def test_rxn_rules_2_removes_a_reaction_with_no_formula():
+    # Both R1 and R2 touch only A/B, and neither has a formula, so both read
+    # as "unknown" -- rxn_rules=2's random choice can land on either one,
+    # and (as with the rxn_rules=3 tie) removing either fixes the leak.
     model = _cycle_model(None, None)
     removed = remove_bad_reactions(model, rxn_rules=2)
-    assert removed == ["R2"]
+    assert removed in (["R1"], ["R2"])
     assert find_leak_metabolite(model, "produce").status == "infeasible"
 
 
