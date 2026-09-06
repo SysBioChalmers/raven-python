@@ -391,9 +391,15 @@ def find_task_essential_reactions(
             except OptimizationError:
                 failed_index.append(i)
         if cache_path is not None:  # atomic checkpoint after each task
+            # The handle must be closed *before* the rename, not merely dropped: a
+            # buffered write is only guaranteed flushed on close, and on Windows
+            # renaming a file that still has an open handle raises PermissionError.
+            # Passing open() straight into pickle.dump left that to refcount timing —
+            # it happens to work on CPython, and emitted a ResourceWarning per task.
             tmp = Path(f"{cache_path}.part")
-            pickle.dump({"per_index": per_index, "mets": task_metabolites, "failed": failed_index},
-                        open(tmp, "wb"))
+            with open(tmp, "wb") as fh:
+                pickle.dump({"per_index": per_index, "mets": task_metabolites,
+                             "failed": failed_index}, fh)
             tmp.replace(cache_path)
 
     # Majority direction across *all* tasks; tie (sum == 0) → forward, as RAVEN's `pos < neg`.
