@@ -2,7 +2,8 @@
 
 Two flavours:
 
-* :func:`compare_models` — N-model presence-matrix overview (RAVEN's
+* :func:`compare_models` — N-model presence-matrix overview, including
+  identifier, EC-code, metabolite-name and equation overlap (RAVEN's
   ``compareMultipleModels`` analogue). "How do these models relate?"
 * :func:`diff_models` — strict two-model semantic-equality diff for CI
   gates. "Are these two models the same?"
