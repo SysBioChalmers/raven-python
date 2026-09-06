@@ -101,11 +101,18 @@ It lives here because it protects the same property the parity tiers do.
 - Every RAVEN-authored model loads and round-trips without losing RAVEN's own
   fields (tier 1).
 - The deterministic paths return the same answer twice.
+- `test_genome_scale.py`, on a licensed nightly runner, checks that a
+  genome-scale ftINIT extraction (`run_ftinit`) has not drifted from its
+  recorded baseline (tier 2) — once a baseline exists; see
+  `test_extraction_overlaps_the_recorded_baseline`'s skip message until the
+  first successful nightly run produces one.
 
 Still only *reported*, not enforced: the genome-scale Human-GEM, yeast and
-multi-organism comparisons in `docs/studies/`, and any small-model extraction
-drift check (tier 2) — both used to be covered by `run_init`-based tests that
-were removed with the rest of the classic INIT MILP. `.github/workflows/parity-nightly.yml`
-still exists to run a licensed-runner genome-scale check but currently has
-nothing genome-scale to run; see `docs/reference/todo.md`. Tier 3 has a stated
-contract and no tests yet for the same reason.
+multi-organism *comparisons against MATLAB RAVEN* in `docs/studies/` (the
+nightly job above is a regression guard on this package, not a cross-language
+check — same distinction as tier 1's baseline), and any small-model extraction
+drift check. A small-model tier-2 test used to cover the latter
+(`test_set_level.py`, against the classic INIT MILP) and was removed along
+with the rest of tINIT; an ftINIT equivalent is open, see
+`docs/reference/todo.md`. Tier 3 has a stated contract and no tests yet for
+the same reason.

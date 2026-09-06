@@ -123,11 +123,11 @@ automatically, so a parity claim cannot fail a build.
   models, plus row/column ordering of the built MILPs. The untracked
   `scripts/determinism_probe.py` / `master_determinism_probe.py` are the starting point.
 * **P1 — Solver-dependent parity job.** Genome-scale ftINIT needs Gurobi, which free
-  runners cannot install. `.github/workflows/parity-nightly.yml` exists for this but
-  currently has no genome-scale tier-2 test to run — the one it was built around
-  (`tests/parity/test_genome_scale.py`) checked the classic INIT MILP and was removed along
-  with the rest of tINIT. An ftINIT equivalent (baseline + recording script) is still open,
-  for both this job and the small-model `test_set_level.py` it also used to run.
+  runners cannot install. `.github/workflows/parity-nightly.yml` runs `tests/parity/test_genome_scale.py`
+  (`run_ftinit`) on a licensed runner and reports the Jaccard numbers, so the study
+  documents stop being hand-refreshed — still needs its first baseline recorded. The
+  small-model equivalent (`test_set_level.py`, deleted along with the rest of tINIT since
+  it checked the classic INIT MILP) has no ftINIT replacement yet.
 * **P1 — Promote or delete the 14 untracked scripts** now sitting in `scripts/`
   (`cross_py_on_mat.py`, `full_pipeline_py.py`, `diff_drafts.py`, `export_draft*.py`,
   `export_scope.py`, `param_sweep.py`, `py_mps.py`, `roworder_test.py`, …). Several are
