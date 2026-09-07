@@ -317,8 +317,9 @@ def fill_tasks(
 ) -> TaskFillResult:
     """Add minimum-cost reference reactions so every task is feasible in ``model``.
 
-    Port of RAVEN ``ftINITFillGapsForAllTasks``: task by task, if a task is infeasible in
-    the (growing) model, :func:`_gap_fill_task` finds the minimum-cost set of reference
+    Port of RAVEN ``fitTasks`` with ``gapFillMode`` ``'preMerged'`` (ftINIT's mode): task by
+    task, if a task is infeasible in the (growing) model, :func:`_gap_fill_task` finds the
+    minimum-cost set of reference
     reactions that restores it and they are added, carrying forward so later tasks see the
     earlier additions. ``reference_model`` supplies the candidates (its reactions not yet in
     the model, excluding exchange/boundary reactions); ``rxn_scores`` (original reaction id →
@@ -335,7 +336,7 @@ def fill_tasks(
     context model cannot perform those tasks, which callers should not ignore silently.
 
     ``verbose`` prints one line per task (added count and running total, matching RAVEN
-    ``ftINITFillGapsForAllTasks``'s per-task report), silent by default.
+    ``fitTasks``'s per-task report), silent by default.
     """
     scores = dict(rxn_scores or {})
     tasks = list(tasks)
