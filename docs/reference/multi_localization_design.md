@@ -159,7 +159,8 @@ a reversible-reaction regression test.)
 **Cost.** Adds, per movable reaction, an activity binary per compartment (plus a reverse binary for
 reversible reactions) and a home/used binary — a materially larger MILP at genome scale (use
 `time_limit`/`mip_gap`). Benchmarked on yeast-GEM it stays sound (zero dead placements) and solves
-to optimality up to ~300 relocated reactions in well under a minute (see `yeast_gem_benchmark.md`).
+to optimality up to ~300 relocated reactions in well under a minute (see
+[yeast_validation.md](../studies/yeast_validation.md)).
 
 **`ε` deadzone (why the default scales with the floor).** The threshold creates a deadzone
 `(0, ε)`: a *used* reaction (no inactive home) that the network forces to carry a tiny but nonzero

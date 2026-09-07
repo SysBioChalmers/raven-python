@@ -35,8 +35,9 @@ FASTA via HMM search.
 
 The KEGG artefact bundle (KO tables, reference model, HMM libraries) is fetched by
 {mod}`raven_toolbox.data`; building and publishing it is a maintainer task — see
-[Maintaining KEGG data](../maintenance/maintaining_kegg_data.md) and the
-[KEGG data format](../maintenance/kegg_data_format.md).
+[Maintaining KEGG data](https://github.com/SysBioChalmers/raven-gecko-parity/blob/main/docs/maintaining_kegg_data.md) and the
+[KEGG data format](https://github.com/SysBioChalmers/raven-gecko-parity/blob/main/docs/kegg_data_format.md)
+(both raven-gecko-parity).
 
 After drafting, fill connectivity gaps with the
 [gap-filling guide](tasks_and_gapfilling.md).

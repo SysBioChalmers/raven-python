@@ -22,8 +22,9 @@ section* of ~40–95-line chapter pages, not a single page.
 
 Background references in this repo: [migration.md](migration.md) (function-by-function port
 status), [matlab_raven_backports.md](matlab_raven_backports.md) (MATLAB ↔ Python differences
-record), [improvements.md](improvements.md) (design decisions + proposed improvements),
-[known_issues.md](known_issues.md) (review backlog — sections A–F are all closed).
+record), [improvements.md](improvements.md) (design decisions + proposed improvements).
+The review-backlog doc (`known_issues.md`, sections A–F) was dropped once fully closed — see
+`CHANGELOG.md`'s "Quality sweep" entries for that history.
 
 ---
 
@@ -232,7 +233,7 @@ what would otherwise have been the one hard blocker.
 ## 4. Maturity checklist (→ raven-toolbox, surfaced in raven-docs)
 
 There is no single view of which functions are production-ready. The information exists
-(tests, studies, `known_issues.md`) but is not aggregated, so users cannot tell a
+(tests, studies) but is not aggregated, so users cannot tell a
 five-times-validated path from a thin wrapper.
 
 * **P0 — Per-function maturity table** with an explicit rubric — **stable** (unit-tested +
@@ -283,5 +284,5 @@ five-times-validated path from a thin wrapper.
   catches it in `tests/test_init_solvers.py`).
 * GLPK's MIP solve ignores `configuration.timeout` at genome scale — blocks GLPK on large
   MILPs.
-* Both documented in [init_solver_benchmark.md](../studies/init_solver_benchmark.md) with
+* Both documented in [the INIT solver benchmark](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/init-solver-benchmark.md) (raven-docs) with
   concrete fix suggestions.
