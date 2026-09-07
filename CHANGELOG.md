@@ -6,9 +6,14 @@ Milestones in the raven-toolbox port. For function-level status see
 
 ## 3.0.0b1 — 2026-09-07
 
-First beta toward 3.0, matching the upcoming MATLAB RAVEN 3.0 beta: thirteen new RAVEN ports,
-ftINIT's metabolomics production-bonus, and a run of parity fixes and hot-path performance work.
+First beta toward 3.0, matching the upcoming MATLAB RAVEN 3.0 beta: classic tINIT removed in
+favour of ftINIT-only, thirteen new RAVEN ports, ftINIT's metabolomics production-bonus, and a
+run of parity fixes and hot-path performance work.
 
+* **Breaking: removed classic tINIT** (`init.run_init`, `init.get_init_model`). raven-toolbox
+  is a new implementation with no installed base to keep it for, unlike MATLAB RAVEN, which
+  keeps both algorithms for backwards compatibility; `ftinit()` is now the only extraction
+  pipeline.
 * `analysis.compare_fluxes` replaces `follow_changed` — a `compareFluxes` port, following RAVEN
   dropping `followChanged`/`followFluxes`/`mapCompartments`.
 * `comparison.compare_models` gained EC-code / metabolite-name / equation overlap matrices,
