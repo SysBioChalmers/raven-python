@@ -4,7 +4,13 @@ Milestones in the raven-toolbox port. For function-level status see
 [docs/raven_migration.md](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/docs/reference/migration.md); for open work see
 [docs/todo.md](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/docs/reference/todo.md).
 
-## Unreleased
+## 3.0.0b1 — 2026-09-07
+
+First beta toward the 3.0 release, tracking the upcoming MATLAB RAVEN 3.0 beta. ftINIT reproducibility
+parameters were renamed ahead of wider adoption (`strict_gap`/`canonical` are now `prove_abs_gap`/
+`resolve_ties`, with corrected determinism numbers), `write_yaml_model` gained two RAVEN-parity fixes,
+`export_model_to_sif` was removed as a mislabeled port, and `prep_init_model` picked up a task-essential
+boundary-semantics fix along with `find_task_essential_reactions` reliability and cache-checkpoint fixes.
 
 * **New: `utils.generate_new_ids`.** Mints fresh sequential ids after a model's
   existing numbering for a prefix, e.g. `r_0001`, `r_0002`. Ported from RAVEN's
