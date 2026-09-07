@@ -4,13 +4,15 @@ Release-time tooling. Not part of the installed package — run them from a chec
 with raven-toolbox installed (`pip install -e .`). End users never need these.
 
 The full publish workflow (build → upload → manifest → sync) is documented in
-[docs/maintenance/artefact_hosting.md](../docs/maintenance/artefact_hosting.md).
+[artefact_hosting.md](https://github.com/SysBioChalmers/raven-gecko-parity/blob/main/docs/artefact_hosting.md)
+(raven-gecko-parity).
 
 ## `build_binary_bundles.py`
 
 Build the per-platform binary ZIPs (BLAST+/DIAMOND/HMMER) from RAVEN's vetted
 `software/` binaries (pinned commits) into `dist/binaries/`, with checksums and
-provenance. See [docs/maintenance/maintaining_binaries.md](../docs/maintenance/maintaining_binaries.md).
+provenance. See [maintaining_binaries.md](https://github.com/SysBioChalmers/raven-gecko-parity/blob/main/docs/maintaining_binaries.md)
+(raven-gecko-parity).
 
 ```bash
 python scripts/build_binary_bundles.py        # -> dist/binaries/*.zip (+ checksums, PROVENANCE)
