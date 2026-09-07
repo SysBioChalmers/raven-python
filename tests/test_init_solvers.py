@@ -1,4 +1,4 @@
-"""Cross-solver smoke tests for the (f)tINIT MILP path.
+"""Cross-solver smoke tests for the ftINIT MILP path.
 
 The clean-data calibration and robustness studies were run on Gurobi; the tractability
 choices (big-M=100, MIP gap, time limits) and the Gurobi-specific param plumbing
@@ -19,7 +19,7 @@ import importlib
 import cobra
 import pytest
 
-from raven_toolbox.init import ftinit, prep_init_model, run_ftinit, run_init
+from raven_toolbox.init import ftinit, prep_init_model, run_ftinit
 from raven_toolbox.tasks import Task, check_tasks
 
 # Detect which MILP-capable optlang interfaces actually work; skip the rest.
@@ -84,15 +84,6 @@ def _toy_ftinit_model() -> cobra.Model:
 
 
 # --------------------------------------------------------------------- tests
-
-def test_run_init_same_verdict(solver, linear_chain_model):
-    """tINIT MILP on a small network drops the negative-score reaction with any solver."""
-    m = linear_chain_model
-    m.solver = solver
-    res = run_init(m, {"r1": 1.0, "r2": 1.0, "r3": -1.0}, prod_weight=0.0, allow_excretion=True)
-    assert "r3" in res.deleted_reactions
-    assert sorted(set(r.id for r in res.model.reactions)) == ["EX_A", "r1", "r2"]
-
 
 def test_run_ftinit_same_verdict(solver):
     """ftINIT MILP picks the same on-set across solvers on a small network."""

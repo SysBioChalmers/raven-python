@@ -1,6 +1,6 @@
 """Validate the ftINIT toy oracles and that our scoring reproduces RAVEN's.
 
-Locks down the score→expression inversion and the scoreComplexModel-equivalent
+Locks down the score→expression inversion and the scoreModel-equivalent
 scoring (RAVEN tinitTests T0009); the oracle constants in tinit_oracles are shared
 with the tests that exercise the full MILP.
 """
@@ -27,7 +27,7 @@ from raven_toolbox.init.score import gene_scores_from_expression, score_reaction
     ],
 )
 def test_scoring_reproduces_defined_scores(make_model, scores):
-    """RAVEN T0009: expr_for_rxn_score → scoreComplexModel round-trips the scores."""
+    """RAVEN T0009: expr_for_rxn_score → scoreModel round-trips the scores."""
     model = make_model()
     expression = expr_for_rxn_score(scores)
     gene_scores = gene_scores_from_expression(expression, 1.0)

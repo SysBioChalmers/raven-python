@@ -152,6 +152,35 @@ def test_duplicate_task_ids_all_contribute():
     assert res.per_task["t"] == {"R1": 1, "R2": 1}
 
 
+def test_processes_matches_sequential():
+    """processes>1 (ProcessPoolExecutor) finds exactly what the sequential loop finds.
+
+    Includes a should_fail task, a failing task and duplicate-id tasks, so the worker
+    path is exercised on every branch record() handles, not just the success case.
+    """
+    m = cobra.Model("dir")
+    a, b = (cobra.Metabolite(x, name=x, compartment="s") for x in "ab")
+    m.add_metabolites([a, b])
+    r = cobra.Reaction("REV", lower_bound=-1000, upper_bound=1000)
+    r.add_metabolites({a: -1, b: 1})
+    m.add_reactions([r])
+    m.objective = "REV"
+    fwd = Task(id="fwd", inputs=[("a[s]", 0.0, 1000.0)], outputs=[("b[s]", 1.0, 1.0)])
+    rev1 = Task(id="rev1", inputs=[("b[s]", 0.0, 1000.0)], outputs=[("a[s]", 1.0, 1.0)])
+    rev2 = Task(id="rev2", inputs=[("b[s]", 0.0, 1000.0)], outputs=[("a[s]", 1.0, 1.0)])
+    sf = Task(id="sf", should_fail=True, outputs=[("b[s]", 1.0, 1.0)])
+    bad = Task(id="bad", outputs=[("z[s]", 1.0, 1.0)])  # unknown metabolite -> failed
+    tasks = [rev1, sf, rev2, bad, fwd]
+
+    seq = find_task_essential_reactions(m, tasks, processes=1)
+    par = find_task_essential_reactions(m, tasks, processes=4)
+
+    assert par.reactions == seq.reactions == {"REV": -1}
+    assert par.failed_tasks == seq.failed_tasks == ["bad"]
+    assert par.task_metabolites == seq.task_metabolites
+    assert par.per_task == seq.per_task
+
+
 def test_duplicate_name_comp_metabolites_both_constrained():
     """A task referencing a name[comp] shared by two metabolites resolves (not 'missing')."""
     m = cobra.Model("dup")

@@ -60,15 +60,15 @@ instead of from the source, so the fix has to be structural, not just a correcti
     biomass helpers, growth conditions, batch curation, ΔG/SBO annotation, transport
     evidence, `assign_compartments`, `diff_models`, the KEGG artefact builders.
   * `differences/matlab-only.md` — `ravenCobraWrapper`, the `drawMap` family, MetaCyc
-    reconstruction (flagged for removal upstream), dynamic FBA, ftINIT metabolomics scoring,
-    Excel import, `printFluxes`; each with the reason it is absent and what to use instead.
+    reconstruction (flagged for removal upstream), dynamic FBA, Excel import, `printFluxes`;
+    each with the reason it is absent and what to use instead.
   * `differences/behaviour.md` — **same function, different answer.** The page that does not
     exist anywhere today and is the most valuable one: differing defaults, arguments, return
     shapes, ordering/tie-breaking, and solver dependence. Rows already known from this repo:
     `check_tasks` (one model reused vs copy-per-task), `reporter_metabolites` (one-sided
     p-value, z-sorted vs RAVEN's two-tailed ordering), `fseof` (abs-slope classifier),
-    `get_elemental_balance` (graded `unknown` class), `run_init` vs `ftinit` score-0
-    semantics, `merge_models` / `add_reactions_from_model` (`name[comp]` matching),
+    `get_elemental_balance` (graded `unknown` class),
+    `merge_models` / `add_reactions_from_model` (`name[comp]` matching),
     `convert_to_irreversible` / `expand_model` (geckopy-derived), `write_yaml_model`
     (`!!omap`, `metaData` first), `diff_models` (order-insensitive grRule logic), plus the
     two the protocol port will surface: `fillGaps` vs the three Python gap-fillers, and
@@ -119,14 +119,15 @@ automatically, so a parity claim cannot fail a build.
   it.)
 * **P1 — Determinism regression tests.** Recent fixes (#76, #83, `c239d2e`) made placement
   and gap-fill deterministic, but no CI test would catch a regression. Add repeated-run
-  identity assertions for `assign_compartments`, `predict_localization`, and
-  `run_init`/`ftinit` on toy models, plus row/column ordering of the built MILPs. The
-  untracked `scripts/determinism_probe.py` / `master_determinism_probe.py` are the starting
-  point.
-* **P1 — Solver-dependent parity job.** Genome-scale (f)tINIT needs Gurobi, which free
-  runners cannot install. A nightly / manually-triggered workflow on a licensed runner that
-  runs the tier-2 checks and reports the Jaccard numbers, so the study documents stop being
-  hand-refreshed.
+  identity assertions for `assign_compartments`, `predict_localization`, and `ftinit` on toy
+  models, plus row/column ordering of the built MILPs. The untracked
+  `scripts/determinism_probe.py` / `master_determinism_probe.py` are the starting point.
+* **P1 — Solver-dependent parity job.** Genome-scale ftINIT needs Gurobi, which free
+  runners cannot install. `.github/workflows/parity-nightly.yml` runs `tests/parity/test_genome_scale.py`
+  (`run_ftinit`) on a licensed runner and reports the Jaccard numbers, so the study
+  documents stop being hand-refreshed — still needs its first baseline recorded. The
+  small-model equivalent (`test_set_level.py`, deleted along with the rest of tINIT since
+  it checked the classic INIT MILP) has no ftINIT replacement yet.
 * **P1 — Promote or delete the 14 untracked scripts** now sitting in `scripts/`
   (`cross_py_on_mat.py`, `full_pipeline_py.py`, `diff_drafts.py`, `export_draft*.py`,
   `export_scope.py`, `param_sweep.py`, `py_mps.py`, `roworder_test.py`, …). Several are
@@ -255,9 +256,9 @@ five-times-validated path from a thin wrapper.
   Audit the subsystems with no local API page — `confidence`, `biomass`, `conditions`,
   `curation`, `annotation`, `manifest`, `data`, `binaries` — and add them to
   `docs/reference/api/`.
-* **P1 — State the known functional gaps in one place**: ftINIT metabolomics scoring
-  (`NotImplementedError`), no Excel import, no MetaCyc reconstruction, no dynamic FBA,
-  genome-scale (f)tINIT effectively requiring Gurobi. Feeds `differences/matlab-only.md`.
+* **P1 — State the known functional gaps in one place**: no Excel import, no MetaCyc
+  reconstruction, no dynamic FBA, genome-scale (f)tINIT effectively requiring Gurobi.
+  Feeds `differences/matlab-only.md`.
 * **P1 — Implement or formally drop the 💡 proposals** in `improvements.md` (A4 compartment
   inference from structured metabolite ids, Y4 a first-class home for
   `deltaG`/`confidence_score`, R4 the `remove_metabolites` wrapper review, G7

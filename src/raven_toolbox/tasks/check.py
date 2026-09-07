@@ -17,6 +17,7 @@ of the system for that check.
 """
 from __future__ import annotations
 
+import concurrent.futures as cf
 import pickle
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -329,12 +330,52 @@ def _task_essential_reactions(
     return essential
 
 
+def _compute_one_task(
+    base: cobra.Model, task: Task, name_to_id, comp_to_ids, original_ids: set[str]
+) -> tuple[dict[str, int] | None, set[str], str | None]:
+    """Essential reactions for one task, or ``(None, set(), error)`` if it could not run.
+
+    Pulled out of :func:`find_task_essential_reactions` so it can run identically from
+    the sequential loop or from a worker process (:func:`_essential_worker`).
+    """
+    task_model, task_mets, error = _build_task_model(base, task, name_to_id, comp_to_ids)
+    if error is not None:
+        return None, set(), error
+    _set_deterministic_solver(task_model)  # match RAVEN solveLP + reproducibility
+    try:
+        return _task_essential_reactions(task_model, original_ids), task_mets, None
+    except OptimizationError:
+        return None, set(), "optimization error"
+
+
+# Set once per worker process by _init_worker; module-level so ProcessPoolExecutor's
+# workers (which import this module fresh rather than inheriting parent state on
+# 'spawn') can reach it without re-pickling `base` on every task.
+_WORKER: dict = {}
+
+
+def _init_worker(base: cobra.Model, name_to_id, comp_to_ids, original_ids: set[str]) -> None:
+    _WORKER["base"] = base
+    _WORKER["name_to_id"] = name_to_id
+    _WORKER["comp_to_ids"] = comp_to_ids
+    _WORKER["original_ids"] = original_ids
+
+
+def _essential_worker(i: int, task: Task) -> tuple[int, dict[str, int] | None, set[str], str | None]:
+    essential, task_mets, error = _compute_one_task(
+        _WORKER["base"], task, _WORKER["name_to_id"], _WORKER["comp_to_ids"], _WORKER["original_ids"]
+    )
+    return i, essential, task_mets, error
+
+
 def find_task_essential_reactions(
     model: cobra.Model,
     tasks: str | Iterable[Task],
     *,
     close_boundaries: bool = False,
     cache_path: str | Path | None = None,
+    verbose: bool = False,
+    processes: int = 1,
     checkpoint_every: int = 10,
 ) -> EssentialReactionsResult:
     """Find the reactions a model must use to satisfy a task list.
@@ -351,21 +392,30 @@ def find_task_essential_reactions(
 
     The solver is configured per task to match RAVEN's ``solveLP`` (``FeasibilityTol =
     1e-9``, single-threaded with a fixed seed) so the degenerate min-flux vertex — and thus
-    the discovered essential set — is reproducible.
+    the discovered essential set — is reproducible. ``Threads=1`` only pins *that one solve*;
+    it says nothing about the tasks themselves, which are independent of each other.
+    ``processes`` (default 1, sequential) parallelises *across* tasks with a
+    ``ProcessPoolExecutor`` — each worker still solves single-threaded, so results are
+    identical to the sequential run, just computed concurrently. Pick it against available
+    cores and memory: each worker holds its own copy of ``model``, sent once at pool
+    startup, not per task.
 
     On a genome-scale model this is slow (a min-flux solve plus a feasibility LP per
     candidate, per task). Pass ``cache_path`` to make it **resumable**: the accumulated
-    results are written there (atomically) every ``checkpoint_every`` tasks and once more
-    after the last one, and a re-run skips tasks already cached — so it survives
-    interruptions across sessions. Re-serializing the whole accumulated result after every
-    single task would make total checkpoint I/O grow quadratically in the task count;
-    ``checkpoint_every`` trades a little resumability granularity (at most that many
-    completed tasks are redone after an interruption) for checkpoint I/O that scales
-    with ``n_tasks / checkpoint_every`` instead.
+    results are written there (atomically) every ``checkpoint_every`` tasks (across both
+    sequential and parallel execution) and once more after the last one, and a re-run skips
+    tasks already cached — so it survives interruptions across sessions. Re-serializing the
+    whole accumulated result after every single task would make total checkpoint I/O grow
+    quadratically in the task count; ``checkpoint_every`` trades a little resumability
+    granularity (at most that many completed tasks are redone after an interruption) for
+    checkpoint I/O that scales with ``n_tasks / checkpoint_every`` instead. ``verbose``
+    prints one line per task as it completes (or is skipped because it is already cached),
+    silent by default. In parallel, lines print in completion order, not task order.
     """
     tasks = _as_tasks(tasks)
     base, name_to_id, comp_to_ids = _prepare_base(model, close_boundaries)
     original_ids = {r.id for r in base.reactions}
+    n_tasks = len(tasks)
 
     # Results are tracked by task *position*, not by task id. A task list routinely
     # reuses one id for many distinct tasks (metabolicTasks_Essential.txt has 57 tasks
@@ -395,26 +445,51 @@ def find_task_essential_reactions(
                          "failed": failed_index}, fh)
         tmp.replace(cache_path)
 
-    done = set(per_index) | set(failed_index)
     since_checkpoint = 0
-    for i, task in enumerate(tasks):
-        if task.should_fail or i in done:
-            continue  # a should-fail task defines no essentials; cached ones are skipped
-        task_model, task_mets, error = _build_task_model(base, task, name_to_id, comp_to_ids)
+
+    def record(i: int, task: Task, essential, task_mets, error) -> None:
+        nonlocal since_checkpoint
         if error is not None:
             failed_index.append(i)
+            if verbose:
+                print(f"[{i + 1}/{n_tasks}] {task.id}: FAILED ({error})", flush=True)
         else:
-            _set_deterministic_solver(task_model)  # match RAVEN solveLP + reproducibility
-            try:
-                task_metabolites |= task_mets
-                per_index[i] = _task_essential_reactions(task_model, original_ids)
-            except OptimizationError:
-                failed_index.append(i)
+            task_metabolites.update(task_mets)
+            per_index[i] = essential
+            if verbose:
+                print(f"[{i + 1}/{n_tasks}] {task.id}: "
+                      f"{len(essential)} essential rxn(s)", flush=True)
         if cache_path is not None:
             since_checkpoint += 1
             if since_checkpoint >= checkpoint_every:
                 write_checkpoint()
                 since_checkpoint = 0
+
+    done = set(per_index) | set(failed_index)
+    pending = [(i, task) for i, task in enumerate(tasks)
+               if not task.should_fail and i not in done]
+    if verbose:
+        for i, task in enumerate(tasks):
+            if i in done and not task.should_fail:
+                print(f"[{i + 1}/{n_tasks}] {task.id}: cached", flush=True)
+
+    if processes <= 1 or len(pending) <= 1:
+        for i, task in pending:
+            essential, task_mets, error = _compute_one_task(
+                base, task, name_to_id, comp_to_ids, original_ids
+            )
+            record(i, task, essential, task_mets, error)
+    else:
+        with cf.ProcessPoolExecutor(
+            max_workers=min(processes, len(pending)),
+            initializer=_init_worker, initargs=(base, name_to_id, comp_to_ids, original_ids),
+        ) as pool:
+            futures = [pool.submit(_essential_worker, i, task) for i, task in pending]
+            by_index = dict(pending)
+            for fut in cf.as_completed(futures):
+                i, essential, task_mets, error = fut.result()
+                record(i, by_index[i], essential, task_mets, error)
+
     if cache_path is not None and since_checkpoint:  # flush any tail not yet checkpointed
         write_checkpoint()
 

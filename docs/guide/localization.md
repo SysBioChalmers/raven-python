@@ -67,4 +67,3 @@ submission — `prepare_deeploc_input` chunks the FASTA at that limit into `…_
 ≥ 10 aa (enforced). {func}`raven_toolbox.localization.fetch_protein_sequences` and
 {func}`raven_toolbox.localization.write_fasta` are the underlying building blocks if you need finer
 control. A ready-to-run script is `scripts/prepare_deeploc_yeast.py`.
->>>>>>> origin/develop
