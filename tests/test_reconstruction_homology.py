@@ -102,9 +102,9 @@ def test_complex_policy_drop_removes_reaction():
     assert "R_cplx" not in {r.id for r in res.model.reactions}
 
 
-# --- strictness alias + bidirectional --------------------------------------
+# --- strictness ------------------------------------------------------------
 
-def test_strictness_alias_maps_params():
+def test_strictness_bidirectional_and_best_hits():
     t = _template()
     hits = make_ortholog_hits([("tg1", "ng1")], "templateGEM", "bug")
     res = get_model_from_homology([t], hits, "bug", strictness=3)  # bidir + best-hits
@@ -118,7 +118,7 @@ def test_one_directional_non_reciprocal():
     t = _template()
     # bidirectional default would find nothing; one-directional should map
     assert "R_single" not in {r.id for r in get_model_from_homology([t], one_way, "bug").model.reactions}
-    res = get_model_from_homology([t], one_way, "bug", bidirectional=False, map_direction="new_to_old")
+    res = get_model_from_homology([t], one_way, "bug", strictness=2, map_direction="new_to_old")
     assert "R_single" in {r.id for r in res.model.reactions}
 
 
