@@ -376,6 +376,7 @@ def find_task_essential_reactions(
     cache_path: str | Path | None = None,
     verbose: bool = False,
     processes: int = 1,
+    checkpoint_every: int = 10,
 ) -> EssentialReactionsResult:
     """Find the reactions a model must use to satisfy a task list.
 
@@ -400,11 +401,16 @@ def find_task_essential_reactions(
     startup, not per task.
 
     On a genome-scale model this is slow (a min-flux solve plus a feasibility LP per
-    candidate, per task). Pass ``cache_path`` to make it **resumable**: each task's result
-    is written there as it completes (atomically), and a re-run skips tasks already cached —
-    so it survives interruptions across sessions. ``verbose`` prints one line per task as it
-    completes (or is skipped because it is already cached), silent by default. In parallel,
-    lines print in completion order, not task order.
+    candidate, per task). Pass ``cache_path`` to make it **resumable**: the accumulated
+    results are written there (atomically) every ``checkpoint_every`` tasks (across both
+    sequential and parallel execution) and once more after the last one, and a re-run skips
+    tasks already cached — so it survives interruptions across sessions. Re-serializing the
+    whole accumulated result after every single task would make total checkpoint I/O grow
+    quadratically in the task count; ``checkpoint_every`` trades a little resumability
+    granularity (at most that many completed tasks are redone after an interruption) for
+    checkpoint I/O that scales with ``n_tasks / checkpoint_every`` instead. ``verbose``
+    prints one line per task as it completes (or is skipped because it is already cached),
+    silent by default. In parallel, lines print in completion order, not task order.
     """
     tasks = _as_tasks(tasks)
     base, name_to_id, comp_to_ids = _prepare_base(model, close_boundaries)
@@ -426,14 +432,23 @@ def find_task_essential_reactions(
             task_metabolites = set(cached["mets"])
             failed_index = list(cached["failed"])
 
-    def checkpoint() -> None:
-        if cache_path is not None:  # atomic checkpoint after each task
-            tmp = Path(f"{cache_path}.part")
-            pickle.dump({"per_index": per_index, "mets": task_metabolites, "failed": failed_index},
-                        open(tmp, "wb"))
-            tmp.replace(cache_path)
+    def write_checkpoint() -> None:
+        assert cache_path is not None  # only called when a cache_path was given
+        # The handle must be closed *before* the rename, not merely dropped: a
+        # buffered write is only guaranteed flushed on close, and on Windows
+        # renaming a file that still has an open handle raises PermissionError.
+        # Passing open() straight into pickle.dump left that to refcount timing —
+        # it happens to work on CPython, and emitted a ResourceWarning per task.
+        tmp = Path(f"{cache_path}.part")
+        with open(tmp, "wb") as fh:
+            pickle.dump({"per_index": per_index, "mets": task_metabolites,
+                         "failed": failed_index}, fh)
+        tmp.replace(cache_path)
+
+    since_checkpoint = 0
 
     def record(i: int, task: Task, essential, task_mets, error) -> None:
+        nonlocal since_checkpoint
         if error is not None:
             failed_index.append(i)
             if verbose:
@@ -444,7 +459,11 @@ def find_task_essential_reactions(
             if verbose:
                 print(f"[{i + 1}/{n_tasks}] {task.id}: "
                       f"{len(essential)} essential rxn(s)", flush=True)
-        checkpoint()
+        if cache_path is not None:
+            since_checkpoint += 1
+            if since_checkpoint >= checkpoint_every:
+                write_checkpoint()
+                since_checkpoint = 0
 
     done = set(per_index) | set(failed_index)
     pending = [(i, task) for i, task in enumerate(tasks)
@@ -470,6 +489,9 @@ def find_task_essential_reactions(
             for fut in cf.as_completed(futures):
                 i, essential, task_mets, error = fut.result()
                 record(i, by_index[i], essential, task_mets, error)
+
+    if cache_path is not None and since_checkpoint:  # flush any tail not yet checkpointed
+        write_checkpoint()
 
     # Majority direction across *all* tasks; tie (sum == 0) → forward, as RAVEN's `pos < neg`.
     direction_votes: dict[str, int] = {}

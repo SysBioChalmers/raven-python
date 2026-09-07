@@ -45,6 +45,38 @@ def test_no_task_no_essentials():
     assert res.reactions == {} and res.per_task == {}
 
 
+def test_cache_path_checkpoints_and_resumes(tmp_path, recwarn):
+    """cache_path must checkpoint cleanly and let a re-run resume from it.
+
+    This path had no coverage at all, despite being what makes a genome-scale prep
+    survive an interruption. Two things are pinned here:
+
+    * the checkpoint leaves no ``.part`` file behind and emits no ResourceWarning --
+      the write used to hand ``open()`` straight to ``pickle.dump`` and rename the file
+      on the next line, leaving the flush-before-rename to refcount timing (it emitted a
+      ResourceWarning per task, 57 per Human-GEM prep, and on Windows renaming a file
+      with a live handle raises PermissionError);
+    * a second call reading that cache returns the same answer, which is the whole point
+      of the feature.
+    """
+    cache = tmp_path / "essential.pkl"
+
+    first = find_task_essential_reactions(
+        make_test_model(), [make_test_task()], cache_path=cache)
+
+    assert cache.exists(), "the checkpoint was never written"
+    assert not (tmp_path / "essential.pkl.part").exists(), "a .part file was left behind"
+    assert not [w for w in recwarn if issubclass(w.category, ResourceWarning)], (
+        "the checkpoint leaked an unclosed file handle"
+    )
+
+    # Resume: the cached per-task results are reused and must reproduce the answer.
+    resumed = find_task_essential_reactions(
+        make_test_model(), [make_test_task()], cache_path=cache)
+    assert resumed.reactions == first.reactions
+    assert sorted(resumed.reactions) == TEST_MODEL_TASK_ESSENTIAL_PREMERGE
+
+
 def test_equation_metabolites_are_protected():
     """A task equation's metabolites count as task metabolites (protected from removal)."""
     m = make_test_model()

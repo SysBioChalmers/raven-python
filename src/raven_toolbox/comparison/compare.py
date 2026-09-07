@@ -1,13 +1,20 @@
 """N-model structural and functional comparison.
 
 Compare two or more models — typically context-specific models extracted from the same
-template — on their reactions, metabolites, genes, subsystems, and (optionally) which
-metabolic tasks they perform. Returns tidy :class:`pandas.DataFrame`\\ s suitable for
-downstream plotting (heatmaps, tSNE/MDS, …) in seaborn / scikit-learn; plotting is
-intentionally not in this function so it stays usable inside pipelines.
+template — on their reactions, metabolites, genes, EC-codes, metabolite names, reaction
+equations (with and without compartments), subsystems, and (optionally) which metabolic
+tasks they perform. Returns tidy :class:`pandas.DataFrame`\\ s suitable for downstream
+plotting (heatmaps, tSNE/MDS, …) in seaborn / scikit-learn; plotting is intentionally not
+in this function so it stays usable inside pipelines.
 
-All matrices use the union of ids across the input models as the row index, so missing
-entries are unambiguously ``0`` / ``False`` rather than ``NaN``.
+All matrices use the union of ids/values across the input models as the row index, so
+missing entries are unambiguously ``0`` / ``False`` rather than ``NaN``.
+
+The ``ec_codes``/``metabolite_names``/``equations``/``equations_no_compartments`` matrices
+are the only ones that compare models by something other than identifier — the useful case
+when two models of the same organism do not share an id convention. RAVEN split this out
+into a separate function, ``compareRxnsGenesMetsComps``; here it is one function, matching
+RAVEN's own later merge of the two into ``compareMultipleModels``.
 """
 from __future__ import annotations
 
@@ -27,18 +34,30 @@ from raven_toolbox.utils.parse import subsystem_to_str
 class ModelComparison:
     """Tabular result of :func:`compare_models`.
 
-    All matrices are indexed by id (reactions/metabolites/genes/subsystems) with one
-    column per model. ``presence`` matrices are 0/1; ``subsystems`` is the per-model
-    reaction count per subsystem. ``similarity`` is the model × model Jaccard on the
-    reaction set (1 = identical, 0 = disjoint). ``tasks`` is the per-model task
-    pass/fail matrix (``None`` unless task checking was requested); ``failed_tasks``
-    maps each model id to the failure messages for the tasks it did not pass.
+    All matrices are indexed by id/value (reactions/metabolites/genes/ec_codes/
+    metabolite_names/equations/equations_no_compartments/subsystems) with one column per
+    model. ``presence`` matrices are 0/1; ``subsystems`` is the per-model reaction count
+    per subsystem. ``similarity`` is the model × model Jaccard on the reaction set
+    (1 = identical, 0 = disjoint). ``tasks`` is the per-model task pass/fail matrix
+    (``None`` unless task checking was requested); ``failed_tasks`` maps each model id to
+    the failure messages for the tasks it did not pass.
+
+    ``equations``/``equations_no_compartments`` key each reaction by a canonical string
+    built from its metabolites and stoichiometry: sides are sorted, and for a reversible
+    reaction the side containing the lexicographically-first metabolite is written as the
+    reactant side, so two reactions that are the same up to metabolite order or arbitrary
+    reversible-direction compare equal. ``equations`` keeps compartments in each
+    metabolite id; ``equations_no_compartments`` strips them.
     """
 
     model_ids: list[str]
     reactions: pd.DataFrame
     metabolites: pd.DataFrame
     genes: pd.DataFrame
+    ec_codes: pd.DataFrame
+    metabolite_names: pd.DataFrame
+    equations: pd.DataFrame
+    equations_no_compartments: pd.DataFrame
     subsystems: pd.DataFrame
     similarity: pd.DataFrame
     tasks: pd.DataFrame | None = None  # filled iff tasks were supplied
@@ -59,6 +78,64 @@ def _presence_matrix(items_per_model: list[list[str]], model_ids: list[str]) -> 
         if items:  # avoid empty-list edge case
             df.loc[list(set(items) & seen), mid] = 1
     return df
+
+
+def _ec_codes(model: cobra.Model) -> list[str]:
+    """Every EC-code annotation value across the model's reactions, flattened.
+
+    cobra stores ``ec-code`` as a bare string or a list per reaction; both are flattened
+    to individual codes here, so (unlike RAVEN's ``eccodes``, one semicolon-joined string
+    per reaction) two reactions that share only one of several EC codes still overlap.
+    """
+    codes: list[str] = []
+    for r in model.reactions:
+        v = r.annotation.get("ec-code")
+        if v is None:
+            continue
+        if isinstance(v, (list, tuple)):
+            codes.extend(str(x) for x in v)
+        else:
+            codes.append(str(v))
+    return codes
+
+
+def _metabolite_names(model: cobra.Model) -> list[str]:
+    """Every metabolite's ``name`` (may repeat across compartments; may be empty)."""
+    return [m.name for m in model.metabolites]
+
+
+def _met_key(met: cobra.Metabolite, *, use_compartments: bool) -> str:
+    """Metabolite identity for equation-building: the id, or the id with its
+    ``_<compartment>`` suffix stripped when ``use_compartments`` is False."""
+    if use_compartments or not met.compartment:
+        return met.id
+    suffix = f"_{met.compartment}"
+    return met.id[: -len(suffix)] if met.id.endswith(suffix) else met.id
+
+
+def _equation_side(pairs: list[tuple[str, float]]) -> list[str]:
+    return sorted(f"{abs(c):g} {k}" if abs(c) != 1 else k for k, c in pairs)
+
+
+def _canonical_equation(rxn: cobra.Reaction, *, use_compartments: bool) -> str:
+    """A reaction-identity string independent of metabolite order and, for reversible
+    reactions, of which arbitrary direction it was written in.
+
+    This is an approximation of RAVEN's ``constructEquations(sortRevRxns=True,
+    sortMetNames=True, useComps=use_compartments)``, not a byte-identical port: it
+    canonicalizes direction only for genuinely reversible reactions (irreversible
+    reactions keep the stored stoichiometry sign, matching the common case where an
+    irreversible reaction is also written forward).
+    """
+    left_pairs = [(_met_key(m, use_compartments=use_compartments), c)
+                  for m, c in rxn.metabolites.items() if c < 0]
+    right_pairs = [(_met_key(m, use_compartments=use_compartments), c)
+                   for m, c in rxn.metabolites.items() if c > 0]
+    left, right = _equation_side(left_pairs), _equation_side(right_pairs)
+    if rxn.reversibility and right and (not left or right[0] < left[0]):
+        left, right = right, left
+    arrow = "<=>" if rxn.reversibility else "=>"
+    return f"{' + '.join(left)} {arrow} {' + '.join(right)}"
 
 
 def _subsystem_counts(model: cobra.Model) -> dict[str, int]:
@@ -91,8 +168,9 @@ def compare_models(
     *,
     tasks: str | Iterable[Task] | None = None,
 ) -> ModelComparison:
-    """Compare N cobra models on their reactions / metabolites / genes / subsystems
-    (and tasks, if provided).
+    """Compare N cobra models on their reactions / metabolites / genes / ec_codes /
+    metabolite_names / equations / equations_no_compartments / subsystems (and tasks, if
+    provided).
 
     ``tasks`` is forwarded to :func:`raven_toolbox.tasks.check_tasks` on each model; pass a
     file path or a parsed task list. When omitted, ``ModelComparison.tasks`` is ``None``.
@@ -118,6 +196,16 @@ def compare_models(
     reactions = _presence_matrix([[r.id for r in m.reactions] for m in models_list], model_ids)
     metabolites = _presence_matrix([[x.id for x in m.metabolites] for m in models_list], model_ids)
     genes = _presence_matrix([[g.id for g in m.genes] for m in models_list], model_ids)
+    ec_codes = _presence_matrix([_ec_codes(m) for m in models_list], model_ids)
+    metabolite_names = _presence_matrix([_metabolite_names(m) for m in models_list], model_ids)
+    equations = _presence_matrix(
+        [[_canonical_equation(r, use_compartments=True) for r in m.reactions] for m in models_list],
+        model_ids,
+    )
+    equations_no_compartments = _presence_matrix(
+        [[_canonical_equation(r, use_compartments=False) for r in m.reactions] for m in models_list],
+        model_ids,
+    )
 
     # Subsystems: union of names, per-model reaction counts.
     sub_counts = [_subsystem_counts(m) for m in models_list]
@@ -148,5 +236,7 @@ def compare_models(
                     failed.setdefault(mid, []).append(f"{r.id}: {r.error}")
 
     return ModelComparison(model_ids=model_ids, reactions=reactions, metabolites=metabolites,
-                           genes=genes, subsystems=subsystems, similarity=similarity,
+                           genes=genes, ec_codes=ec_codes, metabolite_names=metabolite_names,
+                           equations=equations, equations_no_compartments=equations_no_compartments,
+                           subsystems=subsystems, similarity=similarity,
                            tasks=task_df, failed_tasks=failed)

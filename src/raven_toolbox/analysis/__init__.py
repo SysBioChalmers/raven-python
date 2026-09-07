@@ -8,8 +8,11 @@
 * :func:`get_min_nr_fluxes` — minimum-cardinality flux distribution (big-M MILP).
 * :func:`compare_fluxes` — reactions whose flux changed between two conditions.
 * :func:`trace_flux_path` — highest-flux-fraction path between two reactions.
+* :func:`get_flux_z` / :func:`analyze_sampling` — flux-vs-expression change significance
+  between two sampled conditions.
 """
 from raven_toolbox.analysis.compare_fluxes import CompareFluxesResult, compare_fluxes
+from raven_toolbox.analysis.differential_sampling import analyze_sampling, get_flux_z
 from raven_toolbox.analysis.flux_sampling import (
     FluxSamplingResult,
     max_volume_ellipsoid,
@@ -45,9 +48,11 @@ __all__ = [
     "RandomSamplingResult",
     "ReporterResult",
     "TraceFluxPathResult",
+    "analyze_sampling",
     "compare_fluxes",
     "find_good_reactions",
     "fseof",
+    "get_flux_z",
     "get_min_nr_fluxes",
     "max_volume_ellipsoid",
     "print_flux_path",

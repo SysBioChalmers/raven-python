@@ -270,3 +270,114 @@ def test_unproven_tie_break_warns():
     finally:
         ftinit_mod._has_solution = monkey
     assert ok  # the incumbent is still adopted, just no longer silently
+
+
+# --------------------------------------------------------------------------- #
+# metabolomics (production-bonus for detected metabolites).
+#
+# Fixtures and expected outcomes are the same ones hand-verified end-to-end against
+# RAVEN's own ftINITInternalAlg (develop3 branch, the corrected one -- see the
+# reference_reactions postmortem for why not `main`) via a standalone MATLAB probe
+# before porting: same toy topology, same objective values, same flux directions.
+# --------------------------------------------------------------------------- #
+def _irrev_producer_model():
+    """a --[R1, score -2]--> x --[EX_x]--> ; a supplied by a free EX_a.
+
+    R1 is x's only producer and is badly scored -- on its own it would never be kept.
+    """
+    m = cobra.Model("irrev_producer")
+    a, x = (cobra.Metabolite(n, name=n, compartment="s") for n in ("a", "x"))
+    m.add_metabolites([a, x])
+    EXa = cobra.Reaction("EX_a", lower_bound=-1000, upper_bound=1000)
+    EXa.add_metabolites({a: 1})
+    R1 = cobra.Reaction("R1", lower_bound=0, upper_bound=1000)
+    R1.add_metabolites({a: -1, x: 1})
+    EXx = cobra.Reaction("EX_x", lower_bound=-1000, upper_bound=1000)
+    EXx.add_metabolites({x: -1})
+    m.add_reactions([EXa, R1, EXx])
+    return m
+
+
+def test_metabolomics_pulls_in_a_badly_scored_producer():
+    """A negative-score reaction is kept, and genuinely carries flux, to earn the bonus."""
+    m = _irrev_producer_model()
+    res = run_ftinit(m, {"R1": -2.0}, metabolomics={"x": {"R1"}}, prod_weight=5.0)
+    assert "R1" in res.kept_reactions
+    assert abs(res.fluxes["R1"]) > 1e-6
+    # objective = bonus(5) - R1's own cost(2), matching the hand-verified MATLAB run.
+    assert res.objective == pytest.approx(3.0, abs=1e-6)
+
+
+def test_metabolomics_without_a_bonus_leaves_the_producer_off():
+    """Control: prod_weight=0 removes the incentive, so the bad producer is dropped."""
+    m = _irrev_producer_model()
+    res = run_ftinit(m, {"R1": -2.0}, metabolomics={"x": {"R1"}}, prod_weight=0.0)
+    assert "R1" not in res.kept_reactions
+    assert res.objective == pytest.approx(0.0, abs=1e-6)
+
+
+def test_metabolomics_reversible_producer_carries_genuine_production_flux():
+    """A reversible negative-score producer is forced into the *producing* direction.
+
+    EX_y is a one-way sink (never a supply), so satisfying y's mass balance genuinely
+    requires R2 to run forward (b -> y), not just have its indicator flagged "on".
+    """
+    m = cobra.Model("rev_producer")
+    b, y = (cobra.Metabolite(n, name=n, compartment="s") for n in ("b", "y"))
+    m.add_metabolites([b, y])
+    EXb = cobra.Reaction("EX_b", lower_bound=-1000, upper_bound=1000)
+    EXb.add_metabolites({b: 1})
+    R2 = cobra.Reaction("R2", lower_bound=-1000, upper_bound=1000)
+    R2.add_metabolites({b: -1, y: 1})
+    EXy = cobra.Reaction("EX_y", lower_bound=0, upper_bound=1000)  # sink only
+    EXy.add_metabolites({y: -1})
+    m.add_reactions([EXb, R2, EXy])
+
+    res = run_ftinit(m, {"R2": -3.0}, metabolomics={"y": {"R2"}}, prod_weight=5.0)
+    assert "R2" in res.kept_reactions
+    assert res.fluxes["R2"] > 1e-6  # positive: producing y forward, not a fwd/back loop
+    assert res.objective == pytest.approx(2.0, abs=1e-6)  # bonus(5) - cost(3)
+
+
+def test_metabolomics_essential_producer_is_dropped_without_a_crash():
+    """A metabolite whose only producer is already essential needs no bonus variable."""
+    m = _irrev_producer_model()
+    res = run_ftinit(m, {"R1": -2.0}, essential_rxns=["R1"],
+                     metabolomics={"x": {"R1"}}, prod_weight=5.0)
+    assert "R1" in res.kept_reactions  # essential regardless
+    # No bonus was paid for x (R1's own score isn't even in play -- it's essential), so
+    # the objective is the essential-only baseline (0), not inflated by the met bonus.
+    assert res.objective == pytest.approx(0.0, abs=1e-6)
+
+
+def test_metabolomics_zero_score_producer_stays_kept_even_if_never_turned_on():
+    """A score-0 producer is never deleted, matching every other exactly-zero-score
+    reaction -- becoming a metabolomics candidate must not change that.
+
+    R1 here has score 0 and is x's only producer, but prod_weight=0 removes any reason
+    for its (now-real) indicator to turn on. It must still survive into kept_reactions.
+    """
+    m = _irrev_producer_model()
+    res = run_ftinit(m, {"R1": 0.0}, metabolomics={"x": {"R1"}}, prod_weight=0.0)
+    assert "R1" in res.kept_reactions
+
+
+def test_metabolomics_two_metabolites_mixed_categories_no_crash():
+    """Two detected metabolites at once, one irrev- one rev-producer: no crash, both
+    correctly resolved -- the exact shape RAVEN's own metabolomics code once crashed on
+    when only some detected metabolites had a reversible producer."""
+    m1 = _irrev_producer_model()
+    b, y = (cobra.Metabolite(n, name=n, compartment="s") for n in ("b", "y"))
+    m1.add_metabolites([b, y])
+    EXb = cobra.Reaction("EX_b", lower_bound=-1000, upper_bound=1000)
+    EXb.add_metabolites({b: 1})
+    R2 = cobra.Reaction("R2", lower_bound=-1000, upper_bound=1000)
+    R2.add_metabolites({b: -1, y: 1})
+    EXy = cobra.Reaction("EX_y", lower_bound=0, upper_bound=1000)
+    EXy.add_metabolites({y: -1})
+    m1.add_reactions([EXb, R2, EXy])
+
+    res = run_ftinit(m1, {"R1": -2.0, "R2": -3.0},
+                     metabolomics={"x": {"R1"}, "y": {"R2"}}, prod_weight=5.0)
+    assert {"R1", "R2"} <= set(res.kept_reactions)
+    assert res.objective == pytest.approx(5.0, abs=1e-6)  # 2·bonus(5) - cost(2) - cost(3)

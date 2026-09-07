@@ -32,6 +32,11 @@ project-level YAML) and passes it to every operation:
             cofactor_met_names=("ATP", "ADP", "H2O", "H+", "phosphate"))
 """
 from raven_toolbox.biomass.config import BiomassComponent, BiomassConfig
+from raven_toolbox.biomass.fit_parameters import (
+    FitParametersResult,
+    ParameterPosition,
+    fit_parameters,
+)
 from raven_toolbox.biomass.gam import set_gam
 from raven_toolbox.biomass.scale import (
     rescale_pseudoreaction,
@@ -42,6 +47,9 @@ from raven_toolbox.biomass.scale import (
 __all__ = [
     "BiomassComponent",
     "BiomassConfig",
+    "FitParametersResult",
+    "ParameterPosition",
+    "fit_parameters",
     "rescale_pseudoreaction",
     "scale_biomass",
     "set_gam",

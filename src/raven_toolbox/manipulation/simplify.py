@@ -86,21 +86,29 @@ def remove_dead_end_reactions(
     reserved = set(reserved or [])
     removed_rxns: list[str] = []
     removed_mets: list[str] = []
-    while True:
-        removed_mets += _prune_orphan_metabolites(model)
-        dead = [
-            m
-            for m in model.metabolites
-            if len(m.reactions) <= 1 or not all(_can_produce_and_consume(m))
-        ]
+
+    def is_dead(m: cobra.Metabolite) -> bool:
+        return len(m.reactions) <= 1 or not all(_can_produce_and_consume(m))
+
+    removed_mets += _prune_orphan_metabolites(model)
+    # Worklist of metabolites to (re)examine. Only a metabolite touched by a
+    # reaction removed in the previous pass can have newly become a dead end, so
+    # re-checking every metabolite each pass is unnecessary once the first pass
+    # has run.
+    pending: set[cobra.Metabolite] = set(model.metabolites)
+    while pending:
+        dead = [m for m in pending if m in model.metabolites and is_dead(m)]
         if not dead:
             break
         rxns = {r for m in dead for r in m.reactions}
         to_delete = [r for r in rxns if r.id not in reserved]
         if not to_delete:
             break
+        touched = {m for r in to_delete for m in r.metabolites}
         removed_rxns += [r.id for r in to_delete]
         model.remove_reactions(to_delete)
+        removed_mets += _prune_orphan_metabolites(model)
+        pending = {m for m in touched if m in model.metabolites}
     return removed_rxns, removed_mets
 
 

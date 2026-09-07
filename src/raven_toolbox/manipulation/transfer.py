@@ -123,11 +123,14 @@ def add_reactions_from_model(
         model.add_metabolites(new_mets)
 
     added: list[Reaction] = []
-    for srx, rule in zip(source_rxns, rules, strict=True):
+    for srx in source_rxns:
         rxn = Reaction(srx.id, name=srx.name)
         rxn.bounds = srx.bounds
         rxn.subsystem = srx.subsystem
-        model.add_reactions([rxn])
+        added.append(rxn)
+    model.add_reactions(added)  # one batch — per-reaction adds are super-linear at scale
+
+    for srx, rxn, rule in zip(source_rxns, added, rules, strict=True):
         rxn.add_metabolites(
             {draft_by_name[_name_comp(met)]: coef for met, coef in srx.metabolites.items()}
         )
@@ -140,6 +143,5 @@ def add_reactions_from_model(
         if confidence is not None:
             notes["confidence_score"] = confidence
         rxn.notes = notes
-        added.append(rxn)
 
     return added

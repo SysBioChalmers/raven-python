@@ -22,11 +22,12 @@ Reaction categories (RAVEN's six), by score sign × reversibility:
 * **essential** — forced on (``v ≥ force_on_ess``); no indicator. Assumed already
   oriented irreversible in its forced direction (``prepINITModel`` does this).
 
-Objective: **maximise** ``Σ score·indicator``. ftINIT does **not** reward production of
-every metabolite — ``prod_weight`` applies only to metabolomics-detected metabolites (not
-yet implemented; passing a non-empty ``metabolomics`` argument raises
-``NotImplementedError``). Connectivity comes solely from the flux gates plus any
-essential reactions. ``allow_excretion`` relaxes ``S·v = 0`` to ``≥ 0``; ``rem_pos_rev``
+Objective: **maximise** ``Σ score·indicator`` (``+ Σ prod_weight·mon`` when
+``metabolomics`` is given). ftINIT does **not** reward production of every metabolite by
+default — ``prod_weight`` applies only to metabolomics-detected metabolites, each getting
+one continuous ``mon`` variable capped by the sum of its producers' own indicators (see
+``run_ftinit``'s docstring). Connectivity otherwise comes solely from the flux gates plus
+any essential reactions. ``allow_excretion`` relaxes ``S·v = 0`` to ``≥ 0``; ``rem_pos_rev``
 drops positive reversible reactions from the problem (used in the staging schedule).
 
 Needs a MILP solver (cobra's configured optlang solver; only Gurobi is fully viable at
@@ -111,6 +112,8 @@ def run_ftinit(
     time_limit: float | None = None,
     prove_abs_gap: float | None = None,
     resolve_ties: bool = False,
+    metabolomics: Mapping[str, Iterable[str]] | None = None,
+    prod_weight: float = 0.5,
     seed: int = _EXTRACT_SEED,
     threads: int = _EXTRACT_THREADS,
 ) -> FtInitResult:
@@ -150,6 +153,29 @@ def run_ftinit(
     exhaust ``time_limit``; when that happens the (still-adopted) incumbent is an
     unproven tie-break and a warning is raised. See :func:`_resolve_ties`.
 
+    ``metabolomics`` (already in **this model's** id space — :func:`ftinit` resolves a
+    caller-facing metabolite-name list into this once) maps a detected-metabolite label
+    to the set of reaction ids that produce it. A metabolite's ``mon`` indicator
+    (continuous, ``[0, 1]``) is capped by the sum of its producers' own indicators and
+    contributes ``prod_weight`` to the objective when any producer is on — the reward
+    for keeping (or bringing back) a reaction the data itself scored badly, purely
+    because it makes a detected metabolite producible. A producer with score 0 is
+    pulled into the problem (given a continuous indicator, contributing nothing itself)
+    so it has something for ``mon`` to reference; a negative-score producer's indicator
+    gets an added flux *floor* (mirroring what a positive reaction already has), so "on"
+    means the reaction genuinely carries flux, not merely that it is permitted to. A
+    detected metabolite is dropped silently if any of its producers is already in
+    ``essential_rxns`` — it will be produced regardless (RAVEN
+    ``ftINITInternalAlg.m:106-111``). This does not verify the metabolite is actually
+    net-produced through that specific reaction, only that the reaction is "on"; a
+    reaction whose real network role is consumption can still earn the bonus if it ends
+    up carrying flux in reverse (RAVEN's own documented trade-off — the rest of the
+    network's mass balance is trusted to make the "on" flag meaningful).
+
+    ``prod_weight`` is the per-metabolite reward in ``metabolomics``'s ``mon`` terms
+    (RAVEN's ``ftINITInternalAlg`` default when unset; ``ftINIT.m`` itself calls it with
+    5). Unused when ``metabolomics`` is not given.
+
     ``seed`` is Gurobi's ``Seed`` parameter (RAVEN's 1234). The MILP is degenerate, so the
     seed picks which of many equal-score optima the solver returns; varying it is the cheap
     way to probe how much of a result rests on the tie-break rather than on the data.
@@ -170,6 +196,12 @@ def run_ftinit(
     ignore_met_names = set(ignore_mets)
     prob = model.problem
     opt = prob.Model()
+
+    # A detected metabolite already produced by an essential reaction needs no bonus
+    # (it is produced regardless); dropping it here avoids an unused mon/constraint pair.
+    met_producers = {name: set(ids) for name, ids in (metabolomics or {}).items()
+                     if not (set(ids) & essential)}
+    all_met_producers: set[str] = set().union(*met_producers.values()) if met_producers else set()
 
     variables: list = []
     constraints: list = []
@@ -204,7 +236,8 @@ def run_ftinit(
             free_or_essential.add(rid)
             continue
 
-        if score == 0.0:  # free: carries flux for connectivity, not scored/removable
+        if score == 0.0 and rid not in all_met_producers:
+            # free: carries flux for connectivity, not scored/removable
             v = prob.Variable(f"v_{rid}", lb=lb, ub=ub)
             variables.append(v)
             flux_terms[rid] = [(v, 1.0)]
@@ -224,7 +257,21 @@ def run_ftinit(
             flux_terms[rid] = [(v, 1.0)]
             total = v if ub > 0 else -v  # magnitude for a single-direction reaction
 
-        if score > 0:
+        if score == 0.0:
+            # A zero-score metabolite producer still gets an indicator below (purely so
+            # that metabolite's mon term has something to reference), but it must stay
+            # unconditionally kept regardless of what that indicator ends up doing --
+            # RAVEN never deletes an exactly-zero-score reaction at all
+            # (ftINITInternalAlg.m: "deletedRxns = (onoff<0.5) & (rxnScores~=0)"), and
+            # nothing about becoming a candidate producer changes that.
+            free_or_essential.add(rid)
+
+        if score > 0 or rid in all_met_producers:
+            # A zero-score metabolite producer is pulled in here too (score stays 0, so
+            # it contributes nothing itself) purely so it has an indicator for that
+            # metabolite's mon term to reference below (RAVEN: such a reaction "can
+            # still be seen as positive, since it either does not matter ... or can
+            # contribute to an increased score" -- ftINITInternalAlg.m:96-101).
             y = prob.Variable(f"y_{rid}", lb=0.0, ub=1.0)  # continuous indicator, no binary
             variables.append(y)
             indicators[rid] = (y, score)
@@ -239,6 +286,42 @@ def run_ftinit(
             variables.append(x)
             indicators[rid] = (x, score)
             add_constraint(total - big_m * x, ub=0.0, name=f"off_{rid}")  # flux>0 ⇒ x=1
+            if rid in all_met_producers:
+                # The cap above only *permits* flux when x=1; a met-producer also needs
+                # a *floor*, or its production bonus below could be earned without the
+                # reaction ever actually carrying flux (ftINITInternalAlg.m:187-195).
+                add_constraint(total - force_on * x, lb=0.0, name=f"metforce_{rid}")
+                if reversible:
+                    # Without this, vp and vn could both sit at a small positive value
+                    # simultaneously -- a physically meaningless fwd+back "loop" that
+                    # still clears the floor above without a genuine net direction.
+                    # Positive reversibles already need this guard to stop the same
+                    # trick faking "on"; a plain negative reversible never needed it
+                    # (nothing rewards faking one), but a met-producer's indicator now
+                    # feeds a real reward, so it needs the same guard too.
+                    bm = prob.Variable(f"bm_{rid}", type="binary")
+                    variables.append(bm)
+                    add_constraint(vp - big_m * bm, ub=0.0, name=f"metdirp_{rid}")
+                    add_constraint(vn + big_m * bm, ub=big_m, name=f"metdirn_{rid}")
+
+    # One continuous mon ∈ [0, 1] per detected metabolite, capped by the sum of its
+    # producers' own indicators (mon ≤ Σ producer indicators) and rewarded prod_weight
+    # in the objective below -- the "any producer on" bonus (ftINITInternalAlg.m:177-195).
+    # A metabolite with no producer that actually entered the problem (e.g. its only
+    # producers were themselves score-0 and non-producing, or filtered out above) gets
+    # no mon at all: with an empty sum the cap would pin mon at 0 anyway, so skipping it
+    # is just avoiding a dead variable, not a behaviour change.
+    met_bonus_terms = []
+    for i, (name, ids) in enumerate(met_producers.items()):
+        producer_inds = [indicators[rid][0] for rid in ids if rid in indicators]
+        if not producer_inds:
+            continue
+        mon = prob.Variable(f"_mon_{i}", lb=0.0, ub=1.0)
+        variables.append(mon)
+        add_constraint(mon - add([mul([Real(1.0), ind]) for ind in producer_inds]),
+                       ub=0.0, name=f"metprod_{i}")
+        met_bonus_terms.append(mul([Real(prod_weight), mon]))
+        _dbg(f"[ftinit] metabolomics: {name!r} <- {len(producer_inds)} producer(s)")
 
     # Steady state S·v {== 0 | >= 0}; ignored metabolites are left unbalanced.
     # NOTE (allow_excretion sign): we relax to S·v >= 0 (net production / excretion
@@ -267,7 +350,8 @@ def run_ftinit(
             add_constraint(add(termlist), lb=0.0, ub=None if allow_excretion else 0.0)
 
     opt.add(variables + constraints)
-    obj_expr = add([mul([Real(score), ind]) for ind, score in indicators.values()])
+    obj_expr = add([mul([Real(score), ind]) for ind, score in indicators.values()]
+                   + met_bonus_terms)
     opt.objective = prob.Objective(obj_expr, direction="max")
     try:  # Gurobi-specific; harmless if the backend differs. Match RAVEN's optimizeProb
         # defaults exactly, because the ftINIT MILP is highly degenerate and the chosen
@@ -499,9 +583,67 @@ def _nudge_scores(rxn_scores: Mapping[str, float]) -> dict[str, float]:
     return nudged
 
 
+def _metabolomics_producers(prep, metabolomics: Iterable[str]) -> dict[str, set[str]]:
+    """Map each detected metabolite name to its producer reactions in ``prep.min_model``'s
+    (merged) id space.
+
+    A producer is any ``prep.ref_model`` reaction with a positive stoichiometric
+    coefficient for a metabolite of that name, or any *reversible* reaction with a
+    negative one (a producer when run in reverse) — RAVEN's own rule
+    (``ftINIT.m:129-152``). Matching is by metabolite *name* (case-insensitive), not id,
+    unioning across every metabolite that shares it (e.g. the same compound in several
+    compartments) — also RAVEN's rule. Translated through the merge groups the same way
+    the (since-removed) ``reference_reactions`` anchoring did: a merged reaction counts
+    as a producer if *any* of its original members does — the conservative reading,
+    since a group's representative id is otherwise an implementation detail the caller
+    should not need to know.
+
+    Warns (does not raise) for a name matching no metabolite at all — likely a typo or a
+    name from an unrelated model. A name matching a metabolite with no producer at all is
+    not warned about: legitimately nothing to reward, not a usage error.
+    """
+    ref = prep.ref_model
+    by_name: dict[str, list] = {}
+    for m in ref.metabolites:
+        by_name.setdefault(m.name.upper(), []).append(m)
+
+    group_of = prep.group_of
+    members_of_group: dict[int, list[str]] = {}
+    for rid, gid in zip(prep.orig_rxn_ids, prep.group_ids, strict=True):
+        if gid:
+            members_of_group.setdefault(gid, []).append(rid)
+
+    result: dict[str, set[str]] = {}
+    for name in metabolomics:
+        mets = by_name.get(name.upper())
+        if not mets:
+            warnings.warn(
+                f"metabolomics metabolite {name!r} matched no metabolite in this "
+                "template by name; it will have no effect on this build.",
+                stacklevel=2,
+            )
+            continue
+        producer_orig_ids: set[str] = set()
+        for met in mets:
+            for rxn in met.reactions:
+                coeff = rxn.get_coefficient(met.id)
+                reversible = rxn.lower_bound < 0 < rxn.upper_bound
+                if coeff > 0 or (coeff < 0 and reversible):
+                    producer_orig_ids.add(rxn.id)
+        matched: set[str] = set()
+        for r in prep.min_model.reactions:
+            gid = group_of.get(r.id, 0)
+            members = members_of_group.get(gid, [r.id]) if gid else [r.id]
+            if not producer_orig_ids.isdisjoint(members):
+                matched.add(r.id)
+        result[name] = matched
+    return result
+
+
 def _solve_step(
     min_model, scores, step, *, essential, directions, ess_force, force_on, big_m,
     mip_gap, mip_gap_abs, time_limit, prove_abs_gap=None, resolve_ties=False,
+    metabolomics=None, prod_weight=0.5,
     seed=_EXTRACT_SEED, threads=_EXTRACT_THREADS,
 ) -> FtInitResult:
     """Solve one ftINIT step, following RAVEN's multi-run gap-escalation schedule.
@@ -520,7 +662,9 @@ def _solve_step(
             rem_pos_rev=step.pos_rev_off, ignore_mets=step.mets_to_ignore,
             force_on=force_on, force_on_ess=force_on, big_m=big_m,
             mip_gap=mg, mip_gap_abs=mga, time_limit=tl,
-            prove_abs_gap=prove, resolve_ties=resolve_ties, seed=seed, threads=threads,
+            prove_abs_gap=prove, resolve_ties=resolve_ties,
+            metabolomics=metabolomics, prod_weight=prod_weight,
+            seed=seed, threads=threads,
         )
 
     if prove_abs_gap is not None:
@@ -560,6 +704,7 @@ def ftinit(
     steps=None,
     fill_gaps: bool = True,
     metabolomics: Iterable[str] | None = None,
+    prod_weight: float = 0.5,
     force_on: float = _FORCE_ON,
     big_m: float = _BIG_M,
     mip_gap: float | None = None,
@@ -593,11 +738,22 @@ def ftinit(
     step's actual carried flux instead of a flat 0.1) — exposed via per-reaction
     ``essential_force`` on :func:`run_ftinit`.
 
-    ``metabolomics`` (a list of detected metabolite names to reward producing) is
-    **not yet implemented**: the linear merge eliminates degree-2 detected metabolites,
-    so it needs a producer-group-mapping + negative-producer force-flux block — the
-    most intricate MILP piece, for the least-used input. Passing a non-empty value
-    raises ``NotImplementedError``.
+    ``metabolomics`` is a list of detected metabolite **names** (case-insensitive,
+    ``prep.ref_model`` metabolite names — matched and unioned across every metabolite
+    sharing that name, e.g. the same compound in several compartments). Each is resolved
+    once, before the step loop, into its producer reactions (translated through the
+    merge groups so the resolution survives the linear merge collapsing them into
+    combined reactions) and rewarded ``prod_weight`` in every step's objective when any
+    producer is on — see :func:`run_ftinit`'s own ``metabolomics``/``prod_weight``
+    docstring for the MILP mechanics and its one caveat (the bonus checks a producer is
+    "on", not that the metabolite is verifiably net-produced through it). A name that
+    matches no metabolite in ``prep.ref_model`` warns rather than silently doing nothing.
+    Ported from RAVEN's ``ftINITInternalAlg`` on its ``develop3`` branch — the released
+    ``main`` branch has an unrelated, unrepeated defect here (a fixed big-M that
+    incorrectly caps some reversible/negative reactions above magnitude 100; raven-toolbox
+    never had this because its own ``big_m=100`` default relies on the model being
+    rescaled first, not on a per-reaction cap — see the `INIT parameter calibration study
+    <https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/init-param-calibration.md>`_).
 
     ``mip_gap``/``time_limit`` are forwarded to each :func:`run_ftinit` solve. On
     genome-scale models they are essential for tractability — see the `INIT parameter
@@ -641,13 +797,20 @@ def ftinit(
     ``verbose`` prints one line per staged step and forwards to :func:`fill_tasks` for
     per-task gap-fill progress (matching RAVEN ``ftINIT``'s console report); silent by
     default.
+
+    A stability-anchoring parameter (``reference_reactions``, biasing a re-extraction
+    toward a prior build's reaction choices) was implemented and tested against a real
+    curation here; it helped on one cell line and caused a 5x *increase* in spurious
+    essential-gene drift on another, traced to a network-topology regime swap the
+    reference-matching objective cannot see coming, and was removed. See the
+    `reference_reactions postmortem
+    <https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/ftinit-reference-reactions.md>`_
+    on raven-docs for the full account.
     """
-    if metabolomics:
-        raise NotImplementedError(
-            "metabolomics production-bonus is not yet implemented."
-        )
     steps = steps if steps is not None else get_init_steps(series)
     min_model, group_of = prep.min_model, prep.group_of
+    met_producers = (_metabolomics_producers(prep, metabolomics)
+                     if metabolomics is not None else None)
 
     # RAVEN nudges tiny reaction scores off zero once, before per-step grouping.
     rxn_scores = _nudge_scores(rxn_scores)
@@ -679,6 +842,7 @@ def ftinit(
             ess_force=ess_force, force_on=force_on, big_m=big_m,
             mip_gap=mip_gap, mip_gap_abs=mip_gap_abs, time_limit=time_limit,
             prove_abs_gap=prove_abs_gap, resolve_ties=resolve_ties,
+            metabolomics=met_producers, prod_weight=prod_weight,
             seed=seed, threads=threads,
         )
         if res.status == "time_limit":

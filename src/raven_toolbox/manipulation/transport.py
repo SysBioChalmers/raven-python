@@ -44,16 +44,18 @@ def _transport_id_factory(model: cobra.Model, prefix: str):
     pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
     used = [int(m.group(1)) for r in model.reactions if (m := pattern.match(r.id))]
     counter = max(used) + 1 if used else 1
+    reserved: set[str] = set()  # ids already handed out but not yet in model.reactions
 
     def next_id() -> str:
         nonlocal counter
-        # A free id must appear within len(reactions)+1 tries (only that many are
-        # occupied); the bound turns any pathological case into a clear error
+        # A free id must appear within len(reactions)+len(reserved)+1 tries (only that
+        # many are occupied); the bound turns any pathological case into a clear error
         # instead of spinning forever.
-        for _ in range(len(model.reactions) + 2):
+        for _ in range(len(model.reactions) + len(reserved) + 2):
             rid = f"{prefix}{counter:04d}"
             counter += 1
-            if rid not in model.reactions:
+            if rid not in model.reactions and rid not in reserved:
+                reserved.add(rid)
                 return rid
         raise RuntimeError(f"could not allocate a free reaction id with prefix {prefix!r}.")
 
@@ -130,6 +132,7 @@ def add_transport_reactions(
     next_id = _transport_id_factory(model, id_prefix)
 
     added: list[Reaction] = []
+    pending_coeffs: list[dict[Metabolite, float]] = []
     for to_comp in to_compartments:
         to_name = model.compartments.get(to_comp) or to_comp
         targets = _index_by_name(
@@ -156,8 +159,11 @@ def add_transport_reactions(
             rxn = Reaction(next_id())
             rxn.name = f"{name} transport, {from_name}-{to_name}"
             rxn.bounds = bounds
-            model.add_reactions([rxn])
-            rxn.add_metabolites({src: -1, dst: 1})
             added.append(rxn)
+            pending_coeffs.append({src: -1, dst: 1})
+
+    model.add_reactions(added)  # one batch — per-reaction adds are super-linear at scale
+    for rxn, coeffs in zip(added, pending_coeffs, strict=True):
+        rxn.add_metabolites(coeffs)
 
     return added

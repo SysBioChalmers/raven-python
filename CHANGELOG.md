@@ -6,6 +6,32 @@ Milestones in the raven-toolbox port. For function-level status see
 
 ## Unreleased
 
+* **New: `ftinit(..., metabolomics=..., prod_weight=...)`, the metabolomics
+  production-bonus.** Previously raised `NotImplementedError`. A detected metabolite
+  (matched by name against `prep.ref_model`, unioned across every metabolite sharing
+  that name — e.g. the same compound in several compartments) gets a continuous `mon`
+  indicator capped by the sum of its producer reactions' own indicators and rewarded
+  `prod_weight` in the objective whenever any producer is on — the incentive to keep (or
+  bring back) a reaction the expression data alone scored badly, purely because it makes
+  the metabolite producible. A zero-score producer is pulled into the problem so it has
+  an indicator to contribute (its own score stays 0); a negative-score producer's
+  indicator gets an added flux floor, so "on" means it genuinely carries flux, not merely
+  that it is permitted to; a reversible negative-score producer gets the same
+  fwd/back-loop exclusivity guard a positive reversible already has, since its indicator
+  now feeds a real reward. A metabolite is silently dropped if any of its producers is
+  already essential (produced regardless); a name matching no metabolite warns rather
+  than silently doing nothing.
+
+  Ported from RAVEN's `ftINITInternalAlg` on its `develop3` branch, not the released
+  `main` — `main` has an unrelated, unrepeated defect there (a fixed big-M that
+  incorrectly caps some reversible/negative reactions above magnitude 100 for standard
+  RAVEN bounds); raven-toolbox never had this because its own `big_m=100` default relies
+  on the model being rescaled first, not on a per-reaction cap. Verified end-to-end
+  against RAVEN's own MILP (`develop3`, real Gurobi solves, matching objective values and
+  flux directions) before porting — see the
+  [`reference_reactions` postmortem](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/ftinit-reference-reactions.md)
+  for why that distinction between RAVEN branches matters here too.
+
 * **New: `utils.generate_new_ids`.** Mints fresh sequential ids after a model's
   existing numbering for a prefix, e.g. `r_0001`, `r_0002`. Ported from RAVEN's
   `manipulation/generateNewIds.m`, quirks included: the existing maximum and its
@@ -63,6 +89,44 @@ Milestones in the raven-toolbox port. For function-level status see
   `exportModelToSIF`, but no such function exists on any RAVEN branch — it was new,
   Python-only functionality mislabeled as a back-ported one. Removed rather than kept as
   an undocumented MATLAB gap; Cytoscape SIF export is not currently provided.
+
+* **Fixed: `prep_init_model` used the additive boundary default for task-essential-reaction
+  discovery instead of RAVEN's closed one.** RAVEN's `prepINITModel` always closes the
+  model (`closeModel` + `checkTasks` zeroing every metabolite balance,
+  `prepINITModel.m:81-82`/`checkTasks.m:63`) before this step, so a task's declared
+  inputs/outputs are the whole boundary, not additive to the model's own open exchanges.
+  `find_task_essential_reactions` defaults to the additive reading (correct for a
+  standalone check on a model with no boundary metabolites), and `prep_init_model`
+  inherited that default without meaning to: on Human-GEM, whose exchanges all ship open,
+  it collapsed the task-essential set from ~206 reactions to 1, silently removing the task
+  constraint from every extraction. `prep_init_model` now passes `close_boundaries=True`;
+  the standalone function's own default is unchanged.
+* **Fixed: `find_task_essential_reactions`'s `cache_path` checkpoint handed an open file
+  straight to `pickle.dump` and renamed it the next line**, leaving the flush-before-rename
+  to refcount timing — a `ResourceWarning` per task (57 on a Human-GEM prep) and, on
+  Windows, a `PermissionError` renaming a file with a live handle. Closed via a `with`
+  block before the rename; `cache_path` previously had no test coverage at all, despite
+  being what lets an hours-long genome-scale prep survive an interruption.
+* **Fixed: `fill_tasks`'s own degenerate-tie resolution (`_resolve_ties_fill`) could read a
+  non-finite objective as its next phase's cap, and never warned on an unproven tie-break.**
+  Both were already fixed for the main extraction's `_resolve_ties`; `_resolve_ties_fill`
+  mirrors its logic but had drifted out of sync. A timed-out phase can report a non-finite
+  objective (`inf + 0.5` is still `inf`), which would silently disable the parsimony pin;
+  now falls back to the incumbent's own achieved count, and raises the same
+  "tie resolution did not converge" warning as the main extraction when a phase exhausts
+  `time_limit`.
+* **`reference_reactions` (a stability-anchoring parameter for `ftinit()`/`fill_tasks()`)
+  was implemented, validated against a real Human-GEM curation, and removed.** It biased a
+  re-extraction toward a prior build's kept reactions, on the theory that a curated
+  template should only move what the curation touches. Tested against Human-GEM PR #1028
+  (DLD1 + GBM): it reduced spurious essential-gene drift on DLD1 but caused a **5× increase**
+  on GBM, traced to a network-topology regime swap the reference-matching objective has no
+  way to see coming — matching reaction *identity* says nothing about a tied reaction's
+  *redundancy role* in a given cell line's network. The safety property held throughout (it
+  never overrode a real score difference, on either cell line), but that was not enough to
+  justify keeping it. Full account, including the synthetic pre-validation numbers this
+  retracts, in the
+  [`reference_reactions` postmortem](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/ftinit-reference-reactions.md).
 
 ## 0.4.0 — 2026-08-28
 
