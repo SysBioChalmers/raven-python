@@ -161,8 +161,8 @@ that CI executes.
   touches.
 * A per-function maturity table — **stable** / **provisional** / **experimental** — against
   a written rubric, published on the site.
-* The known functional gaps stated in one place (ftINIT metabolomics, no Excel import, no
-  MetaCyc, no dynamic FBA, Gurobi in practice for genome-scale work).
+* The known functional gaps stated in one place (no Excel import, no MetaCyc, no dynamic
+  FBA, Gurobi in practice for genome-scale work).
 * API pages and docstrings for the subsystems that have neither (`confidence`, `biomass`,
   `conditions`, `curation`, `annotation`, `manifest`, `data`, `binaries`) — thin docstrings
   here render as thin pages on the site.
