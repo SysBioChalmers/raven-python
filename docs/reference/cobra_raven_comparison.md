@@ -116,7 +116,7 @@ COBRA has capabilities that RAVEN lacks entirely.
   giving finer granularity on gene confidence than BLAST alone.
 - **ftINIT quality**: For human tissue-specific models based on HPA/GTEx protein/RNA data,
   ftINIT (RAVEN) is the state-of-the-art; COBRA's equivalent methods (GIMME, iMAT, FASTCORE)
-  predate it and are generally less accurate on human models.
+  predate it and are less accurate on human models.
 
 ---
 
@@ -494,8 +494,7 @@ specialised areas and their absence reflects RAVEN's focus on single-organism re
 | `getAllSubGraphs` | Identifies metabolite connectivity subgraphs (connected components) |
 | `traceFluxPath` | Traces the carbon/flux path between two reactions via metabolite producers/consumers |
 | `compareFluxes` | Diffs two flux distributions; reports turned-on, turned-off, flipped, and changed reactions |
-| `followFluxes` | Interactive command-line exploration of a flux distribution |
-| `followChanged` | Displays the reactions that changed most between two conditions |
+| `walkFluxes` | Interactive command-line exploration of a flux distribution |
 
 ### COBRA
 

@@ -80,9 +80,8 @@ def merge_models(
         if key in met_lookup:
             existing = met_lookup[key]
             # Two source models can map to the same name[comp] (or id) with
-            # different formula/charge; silently picking the first-seen has
-            # quietly corrupted mass balance in the past. Warn so the caller
-            # sees the conflict.
+            # different formula/charge; silently picking the first-seen would
+            # quietly corrupt mass balance. Warn so the caller sees the conflict.
             if src.formula and existing.formula and src.formula != existing.formula:
                 warnings.warn(
                     f"merge_models: metabolite {existing.id!r} (from earlier model) "
@@ -122,12 +121,16 @@ def merge_models(
         comp_names.update(model.compartments)
         genes_before = {g.id for g in merged.genes}
 
+        new_rxns: list[Reaction] = []
         for rxn in model.reactions:
             new_id = _unique_id(merged.reactions, rxn.id, origin)
             new_rxn = Reaction(new_id, name=rxn.name)
             new_rxn.bounds = rxn.bounds
             new_rxn.subsystem = rxn.subsystem
-            merged.add_reactions([new_rxn])
+            new_rxns.append(new_rxn)
+        merged.add_reactions(new_rxns)  # one batch — per-reaction adds are super-linear at scale
+
+        for rxn, new_rxn in zip(model.reactions, new_rxns, strict=True):
             new_rxn.add_metabolites(
                 {ensure_metabolite(m, origin): coef for m, coef in rxn.metabolites.items()}
             )

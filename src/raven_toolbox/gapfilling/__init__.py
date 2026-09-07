@@ -1,6 +1,6 @@
 """Gap-filling against template models.
 
-Three complementary strategies are provided:
+Four complementary strategies are provided:
 
 - :func:`connect_blocked_reactions` (connectivity MILP) — minimum-penalty template
   reactions so blocked draft reactions can carry flux.
@@ -13,10 +13,22 @@ Three complementary strategies are provided:
 
 For the objective-feasibility flavour without directionality repair, also see
 ``cobra.flux_analysis.gapfill``.
+
+Separately, :func:`find_leak_metabolite` tests whether the model itself contains a
+stoichiometric leak (a metabolite it can produce or consume for free) rather than
+filling a gap against a template, and :func:`gap_report` (or :func:`print_gap_report`)
+runs a full battery of connectivity checks and summarizes the result.
 """
 from raven_toolbox.gapfilling.fast_lp import FastLPResult, fill_gaps_fast_lp
 from raven_toolbox.gapfilling.fill import GapFillResult, connect_blocked_reactions
 from raven_toolbox.gapfilling.kumar_milp import KumarGapFillResult, fill_gaps_kumar_milp
+from raven_toolbox.gapfilling.leak import LeakMetaboliteResult, find_leak_metabolite
+from raven_toolbox.gapfilling.report import (
+    GapReportResult,
+    MinToConnect,
+    gap_report,
+    print_gap_report,
+)
 from raven_toolbox.gapfilling.topological import TopologicalAnalysisResult, analyse_topology
 
 __all__ = [
@@ -28,4 +40,10 @@ __all__ = [
     "analyse_topology",
     "KumarGapFillResult",
     "fill_gaps_kumar_milp",
+    "LeakMetaboliteResult",
+    "find_leak_metabolite",
+    "GapReportResult",
+    "MinToConnect",
+    "gap_report",
+    "print_gap_report",
 ]

@@ -1,7 +1,9 @@
 """Generic cobra.Model structural transforms that cobrapy does not cover cleanly:
 reaction building from equations, batch GPR / bound changes, irreversibility splitting,
-isozyme expansion, compartment merge / copy, and model merging by name."""
+isozyme expansion, compartment merge / copy, model merging by name, and leak-driven
+reaction removal."""
 from .add import add_reactions_from_equations
+from .bad_reactions import remove_bad_reactions
 from .boundary import close_model
 from .change import change_gene_reaction_rules, change_reaction_equations
 from .compartments import copy_to_compartment, merge_compartments
@@ -10,6 +12,7 @@ from .irreversible import convert_to_irreversible
 from .merge import merge_models
 from .parameters import set_exchange_bounds, set_variance_bounds
 from .remove import remove_genes, remove_metabolites
+from .replace import replace_metabolite
 from .simplify import (
     constrain_reversible_reactions,
     find_duplicate_reactions,
@@ -39,12 +42,14 @@ __all__ = [
     "group_linear_reactions",
     "merge_compartments",
     "merge_models",
+    "remove_bad_reactions",
     "remove_dead_end_reactions",
     "remove_duplicate_reactions",
     "remove_genes",
     "remove_metabolites",
     "remove_no_flux_reactions",
     "remove_zero_interval_reactions",
+    "replace_metabolite",
     "set_exchange_bounds",
     "set_variance_bounds",
     "simplify_model",

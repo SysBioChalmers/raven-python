@@ -45,6 +45,38 @@ def test_no_task_no_essentials():
     assert res.reactions == {} and res.per_task == {}
 
 
+def test_cache_path_checkpoints_and_resumes(tmp_path, recwarn):
+    """cache_path must checkpoint cleanly and let a re-run resume from it.
+
+    This path had no coverage at all, despite being what makes a genome-scale prep
+    survive an interruption. Two things are pinned here:
+
+    * the checkpoint leaves no ``.part`` file behind and emits no ResourceWarning --
+      the write used to hand ``open()`` straight to ``pickle.dump`` and rename the file
+      on the next line, leaving the flush-before-rename to refcount timing (it emitted a
+      ResourceWarning per task, 57 per Human-GEM prep, and on Windows renaming a file
+      with a live handle raises PermissionError);
+    * a second call reading that cache returns the same answer, which is the whole point
+      of the feature.
+    """
+    cache = tmp_path / "essential.pkl"
+
+    first = find_task_essential_reactions(
+        make_test_model(), [make_test_task()], cache_path=cache)
+
+    assert cache.exists(), "the checkpoint was never written"
+    assert not (tmp_path / "essential.pkl.part").exists(), "a .part file was left behind"
+    assert not [w for w in recwarn if issubclass(w.category, ResourceWarning)], (
+        "the checkpoint leaked an unclosed file handle"
+    )
+
+    # Resume: the cached per-task results are reused and must reproduce the answer.
+    resumed = find_task_essential_reactions(
+        make_test_model(), [make_test_task()], cache_path=cache)
+    assert resumed.reactions == first.reactions
+    assert sorted(resumed.reactions) == TEST_MODEL_TASK_ESSENTIAL_PREMERGE
+
+
 def test_equation_metabolites_are_protected():
     """A task equation's metabolites count as task metabolites (protected from removal)."""
     m = make_test_model()
@@ -98,7 +130,7 @@ def test_duplicate_task_ids_all_contribute():
     """Tasks that share an id must each contribute to the union, not overwrite each other.
 
     Real task lists reuse a handful of ids across many tasks (metabolicTasks_Essential.txt
-    has 57 tasks under 5 ids). Keying results by id used to drop all but the last task per
+    has 57 tasks under 5 ids). Keying results by id would drop all but the last task per
     id, under-counting the essential set. Here two tasks share id 't', each making a
     different reaction essential; both must appear.
     """
@@ -118,6 +150,35 @@ def test_duplicate_task_ids_all_contribute():
     # The per-task view merges the same-id tasks (union of their essentials), so the
     # earlier task's reaction is not lost there either.
     assert res.per_task["t"] == {"R1": 1, "R2": 1}
+
+
+def test_processes_matches_sequential():
+    """processes>1 (ProcessPoolExecutor) finds exactly what the sequential loop finds.
+
+    Includes a should_fail task, a failing task and duplicate-id tasks, so the worker
+    path is exercised on every branch record() handles, not just the success case.
+    """
+    m = cobra.Model("dir")
+    a, b = (cobra.Metabolite(x, name=x, compartment="s") for x in "ab")
+    m.add_metabolites([a, b])
+    r = cobra.Reaction("REV", lower_bound=-1000, upper_bound=1000)
+    r.add_metabolites({a: -1, b: 1})
+    m.add_reactions([r])
+    m.objective = "REV"
+    fwd = Task(id="fwd", inputs=[("a[s]", 0.0, 1000.0)], outputs=[("b[s]", 1.0, 1.0)])
+    rev1 = Task(id="rev1", inputs=[("b[s]", 0.0, 1000.0)], outputs=[("a[s]", 1.0, 1.0)])
+    rev2 = Task(id="rev2", inputs=[("b[s]", 0.0, 1000.0)], outputs=[("a[s]", 1.0, 1.0)])
+    sf = Task(id="sf", should_fail=True, outputs=[("b[s]", 1.0, 1.0)])
+    bad = Task(id="bad", outputs=[("z[s]", 1.0, 1.0)])  # unknown metabolite -> failed
+    tasks = [rev1, sf, rev2, bad, fwd]
+
+    seq = find_task_essential_reactions(m, tasks, processes=1)
+    par = find_task_essential_reactions(m, tasks, processes=4)
+
+    assert par.reactions == seq.reactions == {"REV": -1}
+    assert par.failed_tasks == seq.failed_tasks == ["bad"]
+    assert par.task_metabolites == seq.task_metabolites
+    assert par.per_task == seq.per_task
 
 
 def test_duplicate_name_comp_metabolites_both_constrained():

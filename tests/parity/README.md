@@ -1,8 +1,8 @@
 # Cross-language parity checks
 
 These tests answer one question: **does raven-toolbox still agree with MATLAB
-RAVEN?** Until now that agreement was reported in study documents and nothing
-would fail if it stopped being true.
+RAVEN?** Cross-language agreement is otherwise only reported in study documents,
+where nothing fails if it stops being true.
 
 Run them with:
 
@@ -26,39 +26,23 @@ parsing, gene-association normalisation, elemental balance, identifier sorting,
 model merging, reversibility splitting, KEGG table parsing. Values must match.
 A disagreement means one implementation is wrong.
 
-Note that *exact* means semantically exact, not byte-identical. RAVEN and
+*Exact* means semantically exact, not byte-identical. RAVEN and
 raven-toolbox both write valid YAML but differ in key order and quoting style,
 which carries no meaning; comparing bytes would test the serialiser's habits
 rather than the model.
 
 ### Tier 2 — set-level
 
-Mixed-integer results: INIT/ftINIT extraction, gap-filling, compartment
-assignment. These problems have many optima of equal objective value, so a
-different answer is not a wrong answer. What can be checked is *drift*: today's
-result against the result that was last inspected and accepted.
+Mixed-integer results: ftINIT extraction, gap-filling, compartment assignment.
+These problems have many optima of equal objective value, so a different
+answer is not a wrong answer. What can be checked is *drift*: today's result
+against the result that was last inspected and accepted.
 
-`test_set_level.py` does that against a baseline recorded by
-`scripts/parity/record_baseline.py`. When a change is expected to move the
-extraction, read the diff the failure prints, re-record, and say in the pull
-request why it moved:
-
-```bash
-python scripts/parity/record_baseline.py    # uses $RAVEN_ROOT
-```
-
-That baseline asserts **exact** set equality rather than an overlap band,
-because it was measured rather than assumed: on this fixture GLPK and Gurobi
-return the same 13 reactions, and each is identical across repeated runs. A
-difference therefore means this package changed, not that the solver picked
-another optimum. On a fixture where the solvers genuinely disagree, the honest
-form is a band with a measured floor — not a loosened threshold on this one.
-
-The baseline is seeded from raven-toolbox itself, which makes it a regression
-guard rather than a cross-language check. Its `source` field records that, and
-the test prints it on failure so the two are not confused. Extending
-`generate_oracles.m` with an extraction oracle turns the same comparison into a
-real parity check.
+Nothing currently records an ftINIT extraction baseline this way — the tier-2
+extraction check that used to live here compared the classic INIT MILP
+(`run_init`) against a recorded baseline, and was removed along with the rest
+of that MILP. An ftINIT equivalent (baseline + recording script, on the same
+pattern) is open work; see `docs/reference/todo.md`.
 
 ### Tier 3 — statistical
 
@@ -109,22 +93,26 @@ string hashing per process, so a set iterated to build constraint rows gives a
 stable answer within one run and a different one in the next; repeating the call
 in-process cannot see that, so one test runs the computation under three
 `PYTHONHASHSEED` values through `_hashseed_worker.py` and compares digests.
-(That is what `scripts/determinism_probe.py` did by hand while the placement
-determinism fixes were being made.)
 
-It lives here because it protects the same property the parity tiers do — several recent fixes made compartment placement and gap-filling
-deterministic, and nothing would have caught a regression.
+It lives here because it protects the same property the parity tiers do.
 
 ## What is enforced today
 
 - Every RAVEN-authored model loads and round-trips without losing RAVEN's own
   fields (tier 1).
-- The small-model extraction has not drifted from its recorded baseline
-  (tier 2).
 - The deterministic paths return the same answer twice.
+- `test_genome_scale.py`, on a licensed nightly runner, checks that a
+  genome-scale ftINIT extraction (`run_ftinit`) has not drifted from its
+  recorded baseline (tier 2) — once a baseline exists; see
+  `test_extraction_overlaps_the_recorded_baseline`'s skip message until the
+  first successful nightly run produces one.
 
 Still only *reported*, not enforced: the genome-scale Human-GEM, yeast and
-multi-organism comparisons in `docs/studies/`. They need Gurobi and models too
-large for a free runner, so closing that gap needs a nightly job on a licensed
-runner — the next piece of this harness. Tier 3 has a stated contract and no
-tests yet for the same reason.
+multi-organism *comparisons against MATLAB RAVEN* in `docs/studies/` (the
+nightly job above is a regression guard on this package, not a cross-language
+check — same distinction as tier 1's baseline), and any small-model extraction
+drift check. A small-model tier-2 test used to cover the latter
+(`test_set_level.py`, against the classic INIT MILP) and was removed along
+with the rest of tINIT; an ftINIT equivalent is open, see
+`docs/reference/todo.md`. Tier 3 has a stated contract and no tests yet for
+the same reason.

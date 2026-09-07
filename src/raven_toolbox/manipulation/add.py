@@ -22,7 +22,7 @@ So this port keeps only the parts cobra lacks:
 
 Instead of RAVEN's ``eqnType`` integer (1/2/3) the matching mode is a readable
 keyword: ``mets_by="id"`` or ``mets_by="name"``, with ``name[comp]`` recognised
-automatically. See IMPROVEMENTS.md (A-series) for the rationale.
+automatically.
 """
 from __future__ import annotations
 
@@ -98,10 +98,10 @@ def _new_met_id(model: cobra.Model, prefix: str) -> str:
 
 
 def _build_met_index(model: cobra.Model) -> dict[tuple[str, str | None], Metabolite]:
-    """Build a ``(name, compartment) -> metabolite`` index (first match wins,
-    mirroring the old linear scan). Lets name / name[comp] resolution be O(1)
-    instead of re-scanning ``model.metabolites`` per token; callers update it as
-    new mets are created so later tokens dedup against earlier ones."""
+    """Build a ``(name, compartment) -> metabolite`` index (first match wins).
+    Lets name / name[comp] resolution be O(1) instead of re-scanning
+    ``model.metabolites`` per token; callers update it as new mets are created
+    so later tokens dedup against earlier ones."""
     index: dict[tuple[str, str | None], Metabolite] = {}
     for met in model.metabolites:
         index.setdefault((met.name, met.compartment), met)
@@ -194,10 +194,9 @@ def _resolve_metabolite(
 def _warn_unknown_compartment(model: cobra.Model, compartment: str, identifier: str) -> None:
     """Warn when a new metabolite would be born into a not-yet-registered compartment.
 
-    Both ``mets_by`` paths previously created the metabolite without validating
-    the compartment, so a typo (``"cyto"`` for ``"c"``) silently produced a
+    A typo (``"cyto"`` for ``"c"``) would otherwise silently produce a
     one-metabolite ghost compartment. cobra inherits the compartment from the
-    first metabolite assigned to it, so the fix is a warning, not a hard error.
+    first metabolite assigned to it, so this stays a warning, not a hard error.
     """
     known = set(model.compartments) | set(model._compartments)
     if compartment not in known:
@@ -313,13 +312,15 @@ def add_reactions_from_equations(
 
     known_genes = {gene.id for gene in model.genes}
     added: list[Reaction] = []
+    pending_coeffs: list[dict[Metabolite, float]] = []
+    pending_ids: set[str] = set()
     met_index = _build_met_index(model)
 
     for spec in reactions:
         if "id" not in spec:
             raise ValueError(f"Reaction spec missing required 'id': {spec!r}")
         rxn_id = spec["id"]
-        if rxn_id in model.reactions:
+        if rxn_id in model.reactions or rxn_id in pending_ids:
             raise ValueError(
                 f"Reaction {rxn_id!r} already exists. To change its stoichiometry use "
                 "change_reaction_equations; to replace it, remove it first with "
@@ -348,7 +349,13 @@ def add_reactions_from_equations(
         if "subsystem" in spec:
             rxn.subsystem = subsystem_to_str(spec["subsystem"])
 
-        model.add_reactions([rxn])
+        pending_ids.add(rxn_id)
+        pending_coeffs.append(coeffs)
+        added.append(rxn)
+
+    model.add_reactions(added)  # one batch — per-reaction adds are super-linear at scale
+
+    for spec, rxn, coeffs in zip(reactions, added, pending_coeffs, strict=True):
         rxn.add_metabolites(coeffs)
 
         rule = spec.get("gene_reaction_rule", "")
@@ -357,12 +364,10 @@ def add_reactions_from_equations(
                 missing = sorted(set(GPR.from_string(rule).genes) - known_genes)
                 if missing:
                     raise ValueError(
-                        f"Reaction {rxn_id!r} references genes not in the model: "
+                        f"Reaction {rxn.id!r} references genes not in the model: "
                         f"{missing}. Set allow_new_genes=True or add them first."
                     )
             rxn.gene_reaction_rule = rule
             known_genes.update(gene.id for gene in rxn.genes)
-
-        added.append(rxn)
 
     return added

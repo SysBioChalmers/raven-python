@@ -1,10 +1,9 @@
-"""Phase 4d.3: the single-step ftINIT MILP (run_ftinit).
+"""The single-step ftINIT MILP (run_ftinit).
 
-Validated on the testModel oracle against (a) a hand-checked score-optimal solution,
-(b) the formulation invariants, and (c) exact agreement with the already-tested
-run_init. The full-pipeline RAVEN outputs (tinitTests T0001/T0002) additionally
-involve linear merge + the toIgnore masks + staging + exchange re-adding, layered on
-in 4d.2/4d.3b/4d.5.
+Validated on the testModel oracle against (a) a hand-checked score-optimal solution
+and (b) the formulation invariants. The full-pipeline RAVEN outputs (tinitTests
+T0001/T0002) additionally involve linear merge + the toIgnore masks + staging +
+exchange re-adding, covered elsewhere.
 
 Note on the toy result: with strict mass balance and no metabolite-production reward
 (ftINIT, unlike classic INIT, only rewards metabolomics-detected mets), the
@@ -19,7 +18,8 @@ import cobra
 import pytest
 from tinit_oracles import TEST_MODEL_SCORES, expr_for_rxn_score, make_test_model
 
-from raven_toolbox.init import FtInitResult, run_ftinit, run_init
+from raven_toolbox.init import FtInitResult, run_ftinit
+from raven_toolbox.init.ftinit import _EXTRACT_SEED
 from raven_toolbox.init.score import gene_scores_from_expression, score_reactions_from_genes
 
 _LOOP = {"R4", "R6", "R9", "R10"}  # the score-optimal subnetwork (8.0)
@@ -47,20 +47,6 @@ def test_kept_reactions_carry_flux_and_balance():
         assert abs(res.fluxes[rid]) > 1e-9
     # The extracted model is itself feasible/flux-consistent.
     assert res.model.slim_optimize() is not None
-
-
-def test_agrees_with_run_init():
-    """Exact agreement with the classic INIT MILP (no production reward, no rev loops).
-
-    run_init splits reversibles and double-scores both directions unless no_rev_loops,
-    so we compare under matching settings: same objective and same kept set.
-    """
-    model = make_test_model()
-    scores = _scores(model)
-    ft = run_ftinit(model, scores)
-    init = run_init(model, scores, prod_weight=0.0, eps=0.1, no_rev_loops=True)
-    assert set(ft.kept_reactions) == {r.id for r in init.model.reactions}
-    assert ft.objective == pytest.approx(init.objective, abs=1e-6)
 
 
 def test_essential_force_clamps_to_capacity():
@@ -140,7 +126,7 @@ def test_forced_flux_lower_bound_is_respected():
 
 
 # --------------------------------------------------------------------------- #
-# canonical (deterministic uniqueness) — Tier 2 item 4.
+# resolve_ties (deterministic selection among equal optima).
 # --------------------------------------------------------------------------- #
 def _degenerate_model():
     """Two interchangeable negative-score reactions (R1, R2) both feed an essential E.
@@ -166,10 +152,10 @@ def _degenerate_model():
     return m
 
 
-def test_canonical_breaks_degenerate_tie_by_id():
-    """canonical selects the unique sparsest, lowest-id optimum among equal alternatives."""
+def test_resolve_ties_breaks_degenerate_tie_by_id():
+    """resolve_ties selects the sparsest, lowest-id optimum among equal alternatives."""
     m = _degenerate_model()
-    res = run_ftinit(m, {"R1": -1.0, "R2": -1.0}, essential_rxns=["E"], canonical=True)
+    res = run_ftinit(m, {"R1": -1.0, "R2": -1.0}, essential_rxns=["E"], resolve_ties=True)
     # exactly one of the degenerate pair is kept (the tie is resolved, not doubled) ...
     assert len({"R1", "R2"} & set(res.kept_reactions)) == 1
     # ... and it is deterministically the lower-id one.
@@ -178,9 +164,220 @@ def test_canonical_breaks_degenerate_tie_by_id():
     assert res.objective == pytest.approx(-1.0, abs=1e-6)
 
 
-def test_canonical_safe_on_unique_optimum():
-    """On a non-degenerate model canonical returns the same optimum (no regression)."""
+def test_resolve_ties_safe_on_unique_optimum():
+    """On a non-degenerate model resolve_ties returns the same optimum (no regression)."""
     model = make_test_model()
-    res = run_ftinit(model, _scores(model), canonical=True)
+    res = run_ftinit(model, _scores(model), resolve_ties=True)
     assert set(res.kept_reactions) == _LOOP
     assert res.objective == pytest.approx(8.0, abs=1e-6)
+
+
+# --------------------------------------------------------------------------- #
+# seed as an explicit parameter, and the unproven-incumbent warning.
+# --------------------------------------------------------------------------- #
+def test_seed_is_an_explicit_parameter_not_a_hidden_constant():
+    """The solver seed is settable per call; the default matches RAVEN's 1234.
+
+    The seed decides which of several equal-score optima a degenerate MILP returns, so
+    varying it is how a caller probes whether a result rests on the tie-break rather than
+    on the data. It must not require patching a module constant.
+    """
+    m = _degenerate_model()
+    scores = {"R1": -1.0, "R2": -1.0}
+    default = run_ftinit(m, scores, essential_rxns=["E"])
+    explicit = run_ftinit(m, scores, essential_rxns=["E"], seed=_EXTRACT_SEED)
+    assert default.kept_reactions == explicit.kept_reactions
+    # A different seed is accepted and still yields a valid, score-optimal extraction.
+    other = run_ftinit(m, scores, essential_rxns=["E"], seed=7)
+    assert other.objective == pytest.approx(default.objective, abs=1e-6)
+    assert len({"R1", "R2"} & set(other.kept_reactions)) == 1
+
+
+def test_result_reports_solver_status():
+    """FtInitResult carries the accepted solve's status, so callers can spot a fallback."""
+    res = run_ftinit(_degenerate_model(), {"R1": -1.0, "R2": -1.0}, essential_rxns=["E"])
+    assert res.status == "optimal"
+
+
+def test_time_limit_fallback_warns(monkeypatch):
+    """A step that ends at the time limit warns that its kept set is arbitrary.
+
+    RAVEN accepts such an incumbent and so do we, but accepting it *silently* is what
+    makes an unchanged rebuild look like a model change.
+    """
+    import importlib
+
+    from raven_toolbox.init import prep_init_model
+
+    # NB: `raven_toolbox.init.ftinit` resolves to the *function* — the package rebinds the
+    # name — so the module has to be fetched explicitly before it can be patched.
+    ftinit_mod = importlib.import_module("raven_toolbox.init.ftinit")
+    model = make_test_model()
+    prep = prep_init_model(model, ext_comp="s")
+    scores = score_reactions_from_genes(
+        model, gene_scores_from_expression(expr_for_rxn_score(TEST_MODEL_SCORES), 1.0))
+    real = ftinit_mod._solve_step
+
+    def timed_out(*args, **kwargs):
+        res = real(*args, **kwargs)
+        return FtInitResult(res.model, res.kept_reactions, res.deleted_reactions,
+                            res.fluxes, res.objective, on_reactions=res.on_reactions,
+                            achieved_gap=0.42, status="time_limit")
+
+    monkeypatch.setattr(ftinit_mod, "_solve_step", timed_out)
+    with pytest.warns(UserWarning, match="unproven MIP gap"):
+        ftinit_mod.ftinit(prep, scores, fill_gaps=False)
+
+
+def test_unproven_tie_break_warns():
+    """resolve_ties reports when its own phase 2 ends unproven.
+
+    At genome scale the tie-break phases can exhaust the time limit. Their incumbent is
+    still adopted (it measurably reduces the spread), but it is an arbitrary within-gap
+    pick, so ``resolve_ties=True`` must not silently imply a proven canonical selection.
+    Driven through a stub solver, because at toy scale the phases prove instantly.
+    """
+    import importlib
+
+    from optlang import interface
+
+    ftinit_mod = importlib.import_module("raven_toolbox.init.ftinit")
+
+    class _Stub:
+        """Minimal optlang-shaped model that always finishes at the time limit."""
+
+        status = "time_limit"
+
+        def __init__(self):
+            self.objective = interface.Objective(0)
+            self.problem = type("P", (), {"Params": type("R", (), {})()})()
+            self.configuration = type("C", (), {"timeout": None})()
+
+        def add(self, item):
+            pass
+
+        def optimize(self):
+            return self.status
+
+    ind = interface.Variable("ind_R1", lb=0, ub=1)
+    stub = _Stub()
+    monkey = ftinit_mod._has_solution
+    ftinit_mod._has_solution = lambda opt: True
+    try:
+        with pytest.warns(UserWarning, match="tie resolution did not converge"):
+            ok = ftinit_mod._resolve_ties(stub, interface, interface.Variable("objx"),
+                                          {"R1": (ind, -1.0)}, -1.0, 1.0)
+    finally:
+        ftinit_mod._has_solution = monkey
+    assert ok  # the incumbent is still adopted, just no longer silently
+
+
+# --------------------------------------------------------------------------- #
+# metabolomics (production-bonus for detected metabolites).
+#
+# Fixtures and expected outcomes are the same ones hand-verified end-to-end against
+# RAVEN's own ftINITInternalAlg (develop3 branch, the corrected one -- see the
+# reference_reactions postmortem for why not `main`) via a standalone MATLAB probe
+# before porting: same toy topology, same objective values, same flux directions.
+# --------------------------------------------------------------------------- #
+def _irrev_producer_model():
+    """a --[R1, score -2]--> x --[EX_x]--> ; a supplied by a free EX_a.
+
+    R1 is x's only producer and is badly scored -- on its own it would never be kept.
+    """
+    m = cobra.Model("irrev_producer")
+    a, x = (cobra.Metabolite(n, name=n, compartment="s") for n in ("a", "x"))
+    m.add_metabolites([a, x])
+    EXa = cobra.Reaction("EX_a", lower_bound=-1000, upper_bound=1000)
+    EXa.add_metabolites({a: 1})
+    R1 = cobra.Reaction("R1", lower_bound=0, upper_bound=1000)
+    R1.add_metabolites({a: -1, x: 1})
+    EXx = cobra.Reaction("EX_x", lower_bound=-1000, upper_bound=1000)
+    EXx.add_metabolites({x: -1})
+    m.add_reactions([EXa, R1, EXx])
+    return m
+
+
+def test_metabolomics_pulls_in_a_badly_scored_producer():
+    """A negative-score reaction is kept, and genuinely carries flux, to earn the bonus."""
+    m = _irrev_producer_model()
+    res = run_ftinit(m, {"R1": -2.0}, metabolomics={"x": {"R1"}}, prod_weight=5.0)
+    assert "R1" in res.kept_reactions
+    assert abs(res.fluxes["R1"]) > 1e-6
+    # objective = bonus(5) - R1's own cost(2), matching the hand-verified MATLAB run.
+    assert res.objective == pytest.approx(3.0, abs=1e-6)
+
+
+def test_metabolomics_without_a_bonus_leaves_the_producer_off():
+    """Control: prod_weight=0 removes the incentive, so the bad producer is dropped."""
+    m = _irrev_producer_model()
+    res = run_ftinit(m, {"R1": -2.0}, metabolomics={"x": {"R1"}}, prod_weight=0.0)
+    assert "R1" not in res.kept_reactions
+    assert res.objective == pytest.approx(0.0, abs=1e-6)
+
+
+def test_metabolomics_reversible_producer_carries_genuine_production_flux():
+    """A reversible negative-score producer is forced into the *producing* direction.
+
+    EX_y is a one-way sink (never a supply), so satisfying y's mass balance genuinely
+    requires R2 to run forward (b -> y), not just have its indicator flagged "on".
+    """
+    m = cobra.Model("rev_producer")
+    b, y = (cobra.Metabolite(n, name=n, compartment="s") for n in ("b", "y"))
+    m.add_metabolites([b, y])
+    EXb = cobra.Reaction("EX_b", lower_bound=-1000, upper_bound=1000)
+    EXb.add_metabolites({b: 1})
+    R2 = cobra.Reaction("R2", lower_bound=-1000, upper_bound=1000)
+    R2.add_metabolites({b: -1, y: 1})
+    EXy = cobra.Reaction("EX_y", lower_bound=0, upper_bound=1000)  # sink only
+    EXy.add_metabolites({y: -1})
+    m.add_reactions([EXb, R2, EXy])
+
+    res = run_ftinit(m, {"R2": -3.0}, metabolomics={"y": {"R2"}}, prod_weight=5.0)
+    assert "R2" in res.kept_reactions
+    assert res.fluxes["R2"] > 1e-6  # positive: producing y forward, not a fwd/back loop
+    assert res.objective == pytest.approx(2.0, abs=1e-6)  # bonus(5) - cost(3)
+
+
+def test_metabolomics_essential_producer_is_dropped_without_a_crash():
+    """A metabolite whose only producer is already essential needs no bonus variable."""
+    m = _irrev_producer_model()
+    res = run_ftinit(m, {"R1": -2.0}, essential_rxns=["R1"],
+                     metabolomics={"x": {"R1"}}, prod_weight=5.0)
+    assert "R1" in res.kept_reactions  # essential regardless
+    # No bonus was paid for x (R1's own score isn't even in play -- it's essential), so
+    # the objective is the essential-only baseline (0), not inflated by the met bonus.
+    assert res.objective == pytest.approx(0.0, abs=1e-6)
+
+
+def test_metabolomics_zero_score_producer_stays_kept_even_if_never_turned_on():
+    """A score-0 producer is never deleted, matching every other exactly-zero-score
+    reaction -- becoming a metabolomics candidate must not change that.
+
+    R1 here has score 0 and is x's only producer, but prod_weight=0 removes any reason
+    for its (now-real) indicator to turn on. It must still survive into kept_reactions.
+    """
+    m = _irrev_producer_model()
+    res = run_ftinit(m, {"R1": 0.0}, metabolomics={"x": {"R1"}}, prod_weight=0.0)
+    assert "R1" in res.kept_reactions
+
+
+def test_metabolomics_two_metabolites_mixed_categories_no_crash():
+    """Two detected metabolites at once, one irrev- one rev-producer: no crash, both
+    correctly resolved -- the exact shape RAVEN's own metabolomics code once crashed on
+    when only some detected metabolites had a reversible producer."""
+    m1 = _irrev_producer_model()
+    b, y = (cobra.Metabolite(n, name=n, compartment="s") for n in ("b", "y"))
+    m1.add_metabolites([b, y])
+    EXb = cobra.Reaction("EX_b", lower_bound=-1000, upper_bound=1000)
+    EXb.add_metabolites({b: 1})
+    R2 = cobra.Reaction("R2", lower_bound=-1000, upper_bound=1000)
+    R2.add_metabolites({b: -1, y: 1})
+    EXy = cobra.Reaction("EX_y", lower_bound=0, upper_bound=1000)
+    EXy.add_metabolites({y: -1})
+    m1.add_reactions([EXb, R2, EXy])
+
+    res = run_ftinit(m1, {"R1": -2.0, "R2": -3.0},
+                     metabolomics={"x": {"R1"}, "y": {"R2"}}, prod_weight=5.0)
+    assert {"R1", "R2"} <= set(res.kept_reactions)
+    assert res.objective == pytest.approx(5.0, abs=1e-6)  # 2·bonus(5) - cost(2) - cost(3)

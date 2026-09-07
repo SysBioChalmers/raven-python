@@ -1,4 +1,4 @@
-"""Phase 4d.3b: the staged ftINIT pipeline (prep_init_model + get_init_steps + ftinit).
+"""The staged ftINIT pipeline (prep_init_model + get_init_steps + ftinit).
 
 Oracles: RAVEN tinitTests T0001/T0002 on testModel with the default '1+1' schedule.
 """
@@ -161,24 +161,130 @@ def test_essential_merged_away_is_skipped():
     assert "REV" not in prep.essential_rxns  # merged into a collapsed group
 
 
+def test_prep_closes_boundaries_for_task_essentials():
+    """prep_init_model must close boundaries for essential discovery, as RAVEN does.
+
+    RAVEN's ``prepINITModel`` runs ``checkTasks`` on ``closeModel(cModel)``
+    (prepINITModel.m:81-82), and ``checkTasks`` zeroes every metabolite's balance
+    (checkTasks.m:63) before re-opening only what a task declares — so for this step the
+    task file *is* the whole boundary. ``find_task_essential_reactions``' own default is
+    additive (right for a standalone check on a model with no boundary metabolites), and
+    prep must not inherit it: on Human-GEM, whose exchanges all ship open, that collapsed
+    the task-essential set from ~206 reactions to 1 and silently removed the task
+    constraint from every extraction.
+
+    The task is "make b from a". CONV (a→b) is the only route from the task's declared
+    input, but the model also ships an open exchange for c, which ALT (c→b) turns into b
+    without touching a. Additively that un-declared exchange satisfies the task, so neither
+    route is essential; with the boundary closed, only a is available and CONV becomes
+    essential. The toy oracles elsewhere in this file agree under both readings, which is
+    why this regression went unnoticed.
+    """
+    import cobra
+
+    from raven_toolbox.tasks import Task, find_task_essential_reactions
+
+    m = cobra.Model("bypass")
+    a, b, c = (cobra.Metabolite(x, name=x, compartment="s") for x in "abc")
+    m.add_metabolites([a, b, c])
+
+    conv = cobra.Reaction("CONV", lower_bound=0, upper_bound=1000)   # a -> b
+    conv.add_metabolites({a: -1, b: 1})
+    conv.gene_reaction_rule = "g1"
+    alt = cobra.Reaction("ALT", lower_bound=0, upper_bound=1000)     # c -> b, the bypass
+    alt.add_metabolites({c: -1, b: 1})
+    alt.gene_reaction_rule = "g2"
+    exchanges = []
+    for met in (a, b, c):
+        ex = cobra.Reaction(f"EX_{met.id}", lower_bound=-1000, upper_bound=1000)
+        ex.add_metabolites({met: -1})
+        exchanges.append(ex)
+    m.add_reactions([conv, alt, *exchanges])
+
+    task = Task(id="mk_b", inputs=[("a[s]", 0.0, 1000.0)], outputs=[("b[s]", 1.0, 1.0)])
+
+    # The discriminating fact, at the level the bug actually lives (no merging involved).
+    additive = find_task_essential_reactions(m, [task], close_boundaries=False).reactions
+    closed = find_task_essential_reactions(m, [task], close_boundaries=True).reactions
+    assert "CONV" not in additive, "the un-declared EX_c bypass hides CONV additively"
+    assert "CONV" in closed, "with the boundary closed, CONV is the only route from a"
+
+    # prep must take the closed reading. Essentials are reported on merged ids (CONV can
+    # merge with EX_a into one linear group), so assert the set is non-empty rather than
+    # naming CONV itself — under the additive reading it would be empty.
+    prep = prep_init_model(m, [task], ext_comp="s", simplify=False)
+    assert prep.essential_rxns, (
+        "prep_init_model found no task-essential reactions; it is using the additive "
+        "boundary reading instead of RAVEN's prepINITModel closed one"
+    )
+
+
 # --------------------------------------------------------------------------- #
-# strict_gap / canonical (deterministic extraction) — Tier 2 items 4 & 5.
+# prove_abs_gap / resolve_ties (deterministic extraction).
 # These are opt-in; the default path stays exact-RAVEN. On the toy oracle they must
 # reproduce T0001 (no regression) and be run-to-run identical.
 # --------------------------------------------------------------------------- #
-def test_ftinit_strict_gap_matches_oracle():
-    """strict_gap: one near-proven-optimal solve per step, still gives T0001."""
+def test_ftinit_prove_abs_gap_matches_oracle():
+    """prove_abs_gap: one near-proven-optimal solve per step, still gives T0001."""
     model = make_test_model()
     prep = prep_init_model(model, ext_comp="s")
-    out = ftinit(prep, _scores(model), strict_gap=True)
+    out = ftinit(prep, _scores(model), prove_abs_gap=0.05)
     assert {r.id for r in out.reactions} == set(TEST_MODEL_FTINIT_NO_TASKS)
 
 
-def test_ftinit_canonical_matches_oracle_and_is_stable():
-    """canonical (+ strict_gap): preserves T0001 and is identical across repeated runs."""
+def test_ftinit_resolve_ties_matches_oracle_and_is_stable():
+    """resolve_ties (+ prove_abs_gap): preserves T0001, identical across repeated runs."""
     model = make_test_model()
     prep = prep_init_model(model, ext_comp="s")
-    out1 = ftinit(prep, _scores(model), strict_gap=True, canonical=True)
-    out2 = ftinit(prep, _scores(model), strict_gap=True, canonical=True)
+    out1 = ftinit(prep, _scores(model), prove_abs_gap=0.05, resolve_ties=True)
+    out2 = ftinit(prep, _scores(model), prove_abs_gap=0.05, resolve_ties=True)
     assert {r.id for r in out1.reactions} == set(TEST_MODEL_FTINIT_NO_TASKS)
     assert {r.id for r in out1.reactions} == {r.id for r in out2.reactions}
+
+
+# --------------------------------------------------------------------------- #
+# metabolomics (production-bonus for detected metabolites) — full pipeline.
+# Exercises what run_ftinit's own metabolomics tests cannot: metabolite *name*
+# resolution against prep.ref_model and translation through the linear merge.
+#
+# Reuses testModel rather than a hand-rolled fixture: b[c]/c[c] are produced only by
+# R3 (score -1, reversible) and consumed only by R5 (score 0.5, irreversible) -- degree
+# exactly 2 each, so prep_init_model's linear merge combines R3+R5 into one reaction
+# (their shared metabolites happen to cancel 1:1, collapsing to a plain ac -> ec link;
+# verified directly, not assumed). ``b`` is genuinely produced by R3, a *non-survivor*
+# member of that merge group whenever R5 is picked as the survivor id -- exactly the
+# case _metabolomics_producers' "any member matches" translation exists for. Combined
+# score -0.5: outside testModel's own score-optimal internal loop (R4/R6/R9/R10, worth
+# 8.0 -- see test_init_ftinit.py), so R3/R5 are excluded from the baseline oracle
+# (TEST_MODEL_FTINIT_NO_TASKS) with nothing to do with metabolomics.
+# --------------------------------------------------------------------------- #
+def _merged_producer_prep():
+    model = make_test_model()
+    prep = prep_init_model(model, ext_comp="s")
+    assert prep.group_of["R3"] == prep.group_of["R5"] != 0  # merge actually happened
+    return prep, model
+
+
+def test_metabolomics_name_resolves_through_the_merge():
+    """A detected metabolite produced by a non-survivor merge-group member is still
+    correctly resolved and pulls the (badly-scored, merged) reaction in."""
+    prep, model = _merged_producer_prep()
+    scores = _scores(model)
+
+    baseline = ftinit(prep, scores, fill_gaps=False)
+    assert not ({"R3", "R5"} & {r.id for r in baseline.reactions})
+    assert {r.id for r in baseline.reactions} == set(TEST_MODEL_FTINIT_NO_TASKS)
+
+    boosted = ftinit(prep, scores, fill_gaps=False, metabolomics=["b"], prod_weight=5.0)
+    kept_ids = {r.id for r in boosted.reactions}
+    assert {"R3", "R5"} <= kept_ids  # merge group survives whole (all-or-nothing)
+
+
+def test_metabolomics_unknown_name_warns():
+    """A name matching no metabolite (typo, or a name from an unrelated model) warns."""
+    import pytest
+
+    prep, model = _merged_producer_prep()
+    with pytest.warns(UserWarning, match="matched no metabolite"):
+        ftinit(prep, _scores(model), fill_gaps=False,
+              metabolomics=["not_a_real_metabolite"])

@@ -163,6 +163,13 @@ that the transport penalty is a blanket prior applied **without transporter-leve
 
 ## Toward evidence-aware transport scoring
 
+**Shipped.** This section is kept as the original design rationale; the scoring it proposes is
+now implemented as `localization.evidence_aware_transport_cost`, with the Pfam/hmmsearch and
+TCDB/diamond evidence back-ends (`annotate_proteome`) and DeepLoc-compartment matching all
+live — see [transport_evidence_scoring.md](../reference/transport_evidence_scoring.md) for the
+current status and [yeast_validation.md](yeast_validation.md) for it in production use. Only
+the orthology consensus/refinement step below remains open.
+
 The fix follows directly: make the transport cost *evidence-aware*, so the reduction becomes selective
 — penalise transports with **no** transporter support while retaining those with sequence-level
 evidence. This mirrors how the localisation module already scores *metabolic* reactions by gene
@@ -255,5 +262,5 @@ evidence. The actionable conclusion is the **evidence-aware transport scoring** 
 penalise only *unsupported* transports. The carve's big-M formulation is hard enough that neither CPLEX
 nor a tighter Gurobi port proves optimality, so these are deterministic near-optimal incumbents,
 reported with their gaps. The clean, *tight-gap* same-task head-to-head for the paper remains
-[`predictLocalization`](predictlocalization_comparison.md) (same lineage, solves fast, deterministic);
+[`predictLocalization`](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/predictlocalization-comparison.md) (raven-docs; same lineage, solves fast, deterministic);
 CarveFungi is related work of a different kind, and this is a faithful, honest comparison against it.

@@ -81,6 +81,22 @@ def test_seed_is_reproducible(model):
     assert np.allclose(a.to_numpy(), b.to_numpy())
 
 
+def test_parallel_matches_serial(model):
+    """n_proc=2 must yield the same samples as n_proc=1 for the same seed.
+
+    Each sample draws from its own independent RNG stream spawned from
+    `seed`, so results don't depend on whether they were drawn serially in
+    this process or distributed across worker processes.
+    """
+    serial = random_sampling(
+        model, method="random_objective", n_samples=12, seed=11, n_proc=1,
+    ).samples
+    parallel = random_sampling(
+        model, method="random_objective", n_samples=12, seed=11, n_proc=2,
+    ).samples
+    assert np.allclose(serial.to_numpy(), parallel.to_numpy())
+
+
 def test_good_reactions_reused(model):
     """Passing good_reactions back in reproduces the FVA-derived set without recomputing."""
     good = find_good_reactions(model)
@@ -114,9 +130,9 @@ def test_too_few_good_reactions(model):
 def test_good_reactions_keeps_reactions_at_default_bound():
     """A legitimate reaction reaching the model's 1000 bound is not dropped as a loop.
 
-    Regression: the old loop_bound>=1000 test wrongly excluded any reaction that
-    reaches the default bound. Loopless FVA keeps it (real flux) and still drops a
-    closed loop.
+    Reaching the default bound alone is not evidence of a closed loop -- loopless
+    FVA distinguishes a real flux-carrying reaction (kept) from an actual closed
+    cycle (dropped).
     """
     m = cobra.Model("b")
     a, b = (cobra.Metabolite(x, compartment="c") for x in "ab")

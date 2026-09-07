@@ -1,30 +1,33 @@
 # raven-toolbox
 
 [![CI](https://github.com/SysBioChalmers/raven-toolbox/actions/workflows/ci.yml/badge.svg)](https://github.com/SysBioChalmers/raven-toolbox/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/raven-toolbox.svg)](https://pypi.org/project/raven-toolbox/)
 
 **Reconstruction, Analysis and Visualisation of Metabolic Networks — in Python.**
 
 `raven-toolbox` is the Python counterpart of the
-[RAVEN Toolbox 2](https://github.com/SysBioChalmers/RAVEN) (MATLAB). It builds on
+[RAVEN Toolbox](https://github.com/SysBioChalmers/RAVEN) (MATLAB). It builds on
 [**cobrapy**](https://github.com/opencobra/cobrapy) for everything cobrapy already does
-well (simulation, standard analyses, SBML I/O, model manipulation) and adds the
-functionality that's unique to RAVEN:
+well — simulation, standard analyses, SBML I/O, model manipulation — and adds the
+functionality that is unique to RAVEN:
 
 * **De novo reconstruction** from KEGG and protein homology (BLAST / DIAMOND).
-* **Context-specific models** from omics data via **tINIT / ftINIT**, with task-aware
-  gap-filling and the linear-merge MILP reduction.
-* **Metabolic-task** validation (`check_tasks`, `fitTasks`).
-* **Connectivity gap-filling** against template models.
+* **Context-specific models** from omics data via **ftINIT**, with task-aware gap-filling,
+  the linear-merge MILP reduction, and metabolomics-informed reaction scoring.
+* **Metabolic-task** validation (`check_tasks`, `find_task_essential_reactions`).
+* **Gap-filling** — connectivity gap-filling against template models, plus LP/SWIFTCORE,
+  MILP, and topological strategies.
 * **Omics integration** — Human Protein Atlas (proteomics + RNA-seq) ingestion.
-* **Sub-cellular localisation** prediction by MILP, with partial-update mode and
-  pluggable evidence sources (DeepLoc 2, MULocDeep, COMPARTMENTS, UniProt, …).
-* **N-model comparison**; **reporter metabolites**; **FSEOF**; **flux sampling**.
+* **Sub-cellular localisation** prediction by MILP, with partial-update mode and pluggable
+  evidence sources (DeepLoc 2, MULocDeep, COMPARTMENTS, UniProt, …).
+* **N-model comparison**; **reporter metabolites**; **FSEOF**; **flux sampling** (ACHR, CHRR,
+  and the classic random-objective vertex method).
 * **YAML I/O** following the cobra standard, plus geckopy's `ec-*` enzyme-constrained
-  fields. **SIF** export. **RAVEN-style Excel** export.
+  fields, and **RAVEN-style Excel** export.
 
 The status of every RAVEN function (ported, cheatsheet-mapped to cobra, or explicitly
 not ported) is documented function-by-function in
-**[docs/raven_migration.md](docs/reference/migration.md)**.
+**[docs/reference/migration.md](docs/reference/migration.md)**.
 
 ## Design principle
 
@@ -37,20 +40,33 @@ COBRA ecosystem.
 
 ## Status
 
-raven-toolbox has been validated against MATLAB RAVEN on **Human-GEM** (5 Hart2015 cell-line
-models, Jaccard 0.975–0.980 — see [docs/humangem_validation.md](docs/studies/humangem_validation.md)).
-The functional scope of the original RAVEN toolbox is covered with three principled
-omissions, all deliberately out of scope rather than pending work:
+raven-toolbox is working toward a **3.0** release tracking the upcoming MATLAB RAVEN 3.0
+beta — see the [changelog](CHANGELOG.md) for what has changed since the last stable
+release. It has been validated against MATLAB RAVEN on **Human-GEM** (5 Hart2015
+cell-line models, Jaccard 0.975–0.980 — see
+[the Human-GEM validation study](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/humangem-validation.md)
+on raven-docs).
 
+Two deliberate scope decisions, not pending work:
+
+* **Classic tINIT is not implemented — only ftINIT.** raven-toolbox is a new
+  implementation with no installed base of tINIT-built models to support; MATLAB RAVEN
+  keeps both algorithms for backwards compatibility, but ftINIT is the algorithm tINIT
+  was superseded by.
 * **MetaCyc-based reconstruction** is not implemented and is flagged for removal from
   MATLAB RAVEN as well — see [IMPROVEMENTS.md](IMPROVEMENTS.md) under `R-MetaCyc`.
 * **Dynamic FBA** is not implemented — several maintained Python packages already cover
   it ([`dfba`](https://pypi.org/project/dfba/), [`reframed`](https://pypi.org/project/reframed/),
   [`mewpy`](https://pypi.org/project/mewpy/)).
-* **Metabolomics-based scoring in tINIT / ftINIT** is not implemented — passing a
-  non-empty `metabolomics` argument raises `NotImplementedError`.
 
-## Installation (development)
+## Installation
+
+```bash
+pip install raven-toolbox
+```
+
+The latest stable release is on PyPI. To work against the unreleased code on `develop`
+(including this beta), install from git instead:
 
 ```bash
 git clone https://github.com/SysBioChalmers/raven-toolbox
@@ -58,9 +74,9 @@ cd raven-toolbox
 pip install -e ".[dev]"
 ```
 
-raven-toolbox requires Python ≥ 3.11. Genome-scale (f)tINIT MILPs currently require **Gurobi**
-([details on solver portability](docs/studies/init_solver_benchmark.md)); toy and unit-test work
-runs on the open-source GLPK.
+raven-toolbox requires Python ≥ 3.11. Genome-scale ftINIT MILPs currently require **Gurobi**
+([details on solver portability](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/init-solver-benchmark.md)
+on raven-docs); toy and unit-test work runs on the open-source GLPK.
 
 ### External command-line tools (BLAST, DIAMOND, HMMER, MAFFT, CD-HIT)
 
@@ -72,7 +88,7 @@ Which tools a workflow uses:
 | Workflow | Tools |
 |---|---|
 | Homology-based reconstruction | `blastp` + `makeblastdb`, or `diamond` |
-| KEGG HMM query (`getKEGGModelForOrganism`) | `hmmsearch` |
+| KEGG HMM query (`get_kegg_model_for_organism`) | `hmmsearch` |
 | Building the KEGG HMM libraries (maintainers) | `hmmbuild`, `mafft`, `cd-hit` |
 
 Optional:
@@ -99,7 +115,7 @@ instructions. (A hosted ReadTheDocs site is not yet published.)
 ## Relationship to MATLAB RAVEN
 
 `raven-toolbox` is an independent Python reimplementation of the
-[RAVEN Toolbox 2](https://github.com/SysBioChalmers/RAVEN), released under the permissive
+[RAVEN Toolbox](https://github.com/SysBioChalmers/RAVEN), released under the permissive
 **MIT** license. If you use it in scientific work, please cite the RAVEN 2 paper:
 
 > Wang H, Marcišauskas S, Sánchez BJ, Domenzain I, Hermansson D, Agren R, Nielsen J,

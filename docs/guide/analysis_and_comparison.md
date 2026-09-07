@@ -13,6 +13,10 @@ RAVEN analyses that are not in cobrapy's core:
 - {func}`raven_toolbox.analysis.random_sampling` — random-objective flux sampling (wraps
   cobra's samplers); {func}`raven_toolbox.analysis.find_good_reactions` is the companion
   screen.
+- {func}`raven_toolbox.analysis.compare_fluxes` — what changed between two flux
+  distributions: a DataFrame sorted by the size of the change, plus the reactions that
+  were turned on, turned off or reversed. Narrow it to part of the network by naming
+  metabolites (`metabolite_list=["ATP", "NADH"]`).
 
 ## Comparison — {mod}`raven_toolbox.comparison`
 

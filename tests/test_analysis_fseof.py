@@ -1,4 +1,4 @@
-"""Tests for FSEOF (analysis/fseof.py, Phase 5)."""
+"""Tests for FSEOF (analysis/fseof.py)."""
 import cobra
 import pytest
 
@@ -70,6 +70,17 @@ def test_gene_targets_aggregation(model):
     assert "v2" in gB["reactions"]
 
 
+def test_min_target_overrides_default_floor(model):
+    """``min_target`` replaces the default ``target_max / n_steps`` floor,
+    letting a caller anchor the scan's low end elsewhere (e.g. at a
+    growth-optimal target flux) while the ceiling stays the same."""
+    default_res = fseof(model, "EX_P", n_steps=4)
+    custom_res = fseof(model, "EX_P", n_steps=4, min_target=0.0)
+    assert custom_res.enforced[0] == pytest.approx(0.0)
+    assert custom_res.enforced[0] < default_res.enforced[0]
+    assert custom_res.enforced[-1] == pytest.approx(default_res.enforced[-1])
+
+
 def test_unproducible_target_raises(model):
     # A reaction that cannot carry positive flux is not a valid product target.
     dead = cobra.Reaction("dead", lower_bound=0, upper_bound=0)
@@ -87,21 +98,21 @@ def test_infeasible_model_raises_clear_error(model):
         fseof(model, "EX_P", n_steps=4)
 
 
-# --- regression: slope-based labels (known_issues.md F3) -------------------
+# --- regression: slope-based labels -----------------------------------
 
 def test_amplify_label_uses_abs_slope_not_endpoint_difference():
-    """A reaction whose |flux| trend is upward but whose final value happens
-    to equal the initial (endpoints straddle a peak) should be labelled
-    ``amplify`` by the regression-slope rule, not ``knockdown`` by the old
-    endpoint check."""
+    """A reaction whose |flux| trend is upward but whose final value equals
+    the initial value (endpoints straddle a peak) must be labelled
+    ``amplify`` by the regression-slope rule -- comparing endpoints alone
+    would misclassify it as ``knockdown``."""
     import numpy as np
     import pandas as pd
 
     from raven_toolbox.analysis.fseof import _classify
 
     # Endpoints equal (0), but the |flux| regression slope is clearly positive
-    # over the scan — the new classifier picks amplify; the old endpoint code
-    # would have said knockdown (final not below eps, abs(final) not > abs(initial)).
+    # over the scan, so this must classify as amplify -- comparing final vs
+    # initial value alone would misclassify it as knockdown.
     enforced = np.linspace(0.0, 1.0, 6)
     flux = np.array([0.0, 0.3, 0.6, 0.9, 0.4, 0.0])
     scan = pd.DataFrame([flux], index=["r_test"], columns=enforced)

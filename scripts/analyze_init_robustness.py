@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Robustness of (f)tINIT to degraded transcriptomics input (Phase 4d.7).
+"""Robustness of ftINIT to degraded transcriptomics input.
 
 The metabolic-task layer is *always part of the pipeline* — it is what makes the output a
 functional model. The experimental variable here is therefore the **transcriptomics
@@ -29,16 +29,15 @@ Two phases:
 * **gradient** — task pipeline across degradation levels; shows functional integrity and
   reaction-set drift vs the clean-data model.
 * **levers**   — at a fixed severe degradation, vary the robustness parameters
-  (``no_gene_score``, ``force_on``; ``prod_weight``/``eps`` for tINIT) to see which keeps
-  the model closest to the clean-data result / most functional.
+  (``no_gene_score``, ``force_on``) to see which keeps the model closest to the
+  clean-data result / most functional.
 
-``--algo ftinit`` (default) or ``tinit``. Resumable; reuses the cached Human-GEM task prep
-(``rg_prep_tasks.pkl``). Loose MIP gap for speed (functionality + set overlap, not the
-exact optimum, are the metrics).
+Resumable; reuses the cached Human-GEM task prep (``rg_prep_tasks.pkl``). Loose MIP
+gap for speed (functionality + set overlap, not the exact optimum, are the metrics).
 
 Usage
 -----
-    python scripts/analyze_init_robustness.py --algo ftinit --cell HCT116
+    python scripts/analyze_init_robustness.py --cell HCT116
 """
 from __future__ import annotations
 
@@ -51,12 +50,7 @@ from pathlib import Path
 import cobra
 import numpy as np
 
-from raven_toolbox.init import (
-    ftinit,
-    gene_scores_from_expression,
-    get_init_model,
-    score_reactions_from_genes,
-)
+from raven_toolbox.init import ftinit, gene_scores_from_expression, score_reactions_from_genes
 from raven_toolbox.tasks import check_tasks, parse_task_list
 
 # Degradation grid (severity per kind). A mild and a severe point per kind.
@@ -68,8 +62,6 @@ GRADIENT = {
 LEVER_KIND, LEVER_LEVEL = "dropout", 0.7      # severe-but-tractable point for the levers
 NO_GENE_SCORES = (-1.0, -0.5)                 # vs the default -2 (the gradient row)
 FORCE_ONS = (0.2,)                            # vs the default 0.1
-PROD_WEIGHTS = (0.0, 1.0, 2.0)                # tINIT only (default 0.5)
-EPS_VALS = (0.5, 1.0)                         # tINIT only (gradient default 0.1; test higher)
 
 # Loose solver tolerances (speed; functionality + set overlap, not the exact optimum).
 MIP_GAP, TIME_LIMIT = 0.02, 120.0
@@ -156,14 +148,13 @@ def main() -> None:
     ap.add_argument("--work", type=Path, default=Path.home() / "hgem_compare")
     ap.add_argument("--human-gem", type=Path, default=Path.home() / "github" / "Human-GEM")
     ap.add_argument("--cell", default="HCT116")
-    ap.add_argument("--algo", choices=("ftinit", "tinit"), default="ftinit")
     ap.add_argument("--phase", default="gradient,levers")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--doc", type=Path, default=None)
     args = ap.parse_args()
 
-    out = args.out or args.work / f"init_robustness_{args.algo}_{args.cell}.pkl"
+    out = args.out or args.work / f"init_robustness_{args.cell}.pkl"
     store: dict = pickle.load(open(out, "rb")) if out.exists() else {}
 
     def save():
@@ -173,7 +164,7 @@ def main() -> None:
 
     def cached(key, fn):
         if key not in store:
-            print(f"[{args.algo}] {key[1]} ...", flush=True)
+            print(f"[ftinit] {key[1]} ...", flush=True)
             store[key] = fn()
             save()
         return store[key]
@@ -191,28 +182,17 @@ def main() -> None:
     tasks = parse_task_list(str(args.human_gem / "data" / "metabolicTasks" /
                                 "metabolicTasks_Essential.txt"))
     prep = pickle.load(open(args.work / "rg_prep_tasks.pkl", "rb"))  # ftINIT uses task layer
-    task_layer_note = ("task layer always on" if args.algo == "ftinit"
-                       else "essential_rxns=[] (tINIT lb=eps incompatible with many essentials)")
     print(f"[{time.time()-t0:.0f}s] ref {len(ref.reactions)} rxns, {len(tasks)} tasks, "
-          f"cell={args.cell}, algo={args.algo} ({task_layer_note})", flush=True)
+          f"cell={args.cell} (task layer always on)", flush=True)
 
     def model_for(e, **kw):
         g = gene_scores_from_expression(e, 1.0)
         r = score_reactions_from_genes(ref, g, no_gene_score=kw.get("no_gene_score", -2.0))
-        if args.algo == "ftinit":
-            return ftinit(prep, r, gene_scores=g, series="1+1",
-                          force_on=kw.get("force_on", 0.1), mip_gap=MIP_GAP, time_limit=TIME_LIMIT)
-        # tINIT's essential_rxns are forced via lb=eps; >100 essentials simultaneously is
-        # infeasible at genome scale regardless of eps (see docs/init_param_calibration.md
-        # §1.5). tINIT is therefore run *without* essentials here — the realistic
-        # tINIT-without-gap-fill picture. Use a small default eps (0.1) all the same to
-        # avoid the unrelated connectivity-threshold over-constraint.
-        return get_init_model(ref, rxn_scores=r, essential_rxns=[],
-                              prod_weight=kw.get("prod_weight", 0.5), eps=kw.get("eps", 0.1),
-                              mip_gap=MIP_GAP, time_limit=TIME_LIMIT).model
+        return ftinit(prep, r, gene_scores=g, series="1+1",
+                      force_on=kw.get("force_on", 0.1), mip_gap=MIP_GAP, time_limit=TIME_LIMIT)
 
     phases = set(args.phase.split(","))
-    doc = [f"# (f)tINIT robustness to degraded transcriptomics — Human-GEM / {args.cell} / {args.algo}",
+    doc = [f"# ftINIT robustness to degraded transcriptomics — Human-GEM / {args.cell}",
            "", "Task + gap-fill layer is always on (it is part of the pipeline); the variable is the "
            "expression input. Functional = fraction of essential tasks performed (check_tasks); "
            "Jaccard is reaction-set overlap with the clean-data model. Generated by "
@@ -238,26 +218,17 @@ def main() -> None:
         e = degrade(expr, LEVER_KIND, LEVER_LEVEL, args.seed)
         tag = f"{LEVER_KIND}={LEVER_LEVEL}"
         rows = []
-        if args.algo == "ftinit":
-            for ngs in NO_GENE_SCORES:
-                rows.append(cached(("lever", f"no_gene_score={ngs}"), lambda ngs=ngs:
-                            _measure(f"no_gene_score={ngs}", lambda: model_for(e, no_gene_score=ngs),
-                                     tasks, clean_set)))
-            for fo in FORCE_ONS:
-                rows.append(cached(("lever", f"force_on={fo}"), lambda fo=fo:
-                            _measure(f"force_on={fo}", lambda: model_for(e, force_on=fo),
-                                     tasks, clean_set)))
-        else:
-            for pw in PROD_WEIGHTS:
-                rows.append(cached(("lever", f"prod_weight={pw}"), lambda pw=pw:
-                            _measure(f"prod_weight={pw}", lambda: model_for(e, prod_weight=pw),
-                                     tasks, clean_set)))
-            for ev in EPS_VALS:
-                rows.append(cached(("lever", f"eps={ev}"), lambda ev=ev:
-                            _measure(f"eps={ev}", lambda: model_for(e, eps=ev), tasks, clean_set)))
+        for ngs in NO_GENE_SCORES:
+            rows.append(cached(("lever", f"no_gene_score={ngs}"), lambda ngs=ngs:
+                        _measure(f"no_gene_score={ngs}", lambda: model_for(e, no_gene_score=ngs),
+                                 tasks, clean_set)))
+        for fo in FORCE_ONS:
+            rows.append(cached(("lever", f"force_on={fo}"), lambda fo=fo:
+                        _measure(f"force_on={fo}", lambda: model_for(e, force_on=fo),
+                                 tasks, clean_set)))
         doc += _table(f"Levers at {tag}: which parameter keeps the model closest to clean?", rows,
                       "Compare against the default-parameter row for this severity in the gradient "
-                      "table above (no_gene_score=-2, force_on=0.1 / prod_weight=0.5, eps=1.0).")
+                      "table above (no_gene_score=-2, force_on=0.1).")
 
     if args.doc:
         args.doc.write_text("\n".join(doc) + "\n")

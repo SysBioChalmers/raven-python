@@ -30,12 +30,14 @@ FASTA via HMM search.
 - **Your sequences (HMM search):** {func}`raven_toolbox.reconstruction.kegg.assign_kos` →
   {func}`raven_toolbox.reconstruction.kegg.get_kegg_model_from_sequences`. The HMM cut-off
   defaults are calibrated in the
-  [KEGG HMM cut-off study](../studies/kegg_hmm_cutoff_calibration.md).
+  [KEGG HMM cut-off calibration study](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/kegg-hmm-cutoff-calibration.md)
+  (raven-docs).
 
 The KEGG artefact bundle (KO tables, reference model, HMM libraries) is fetched by
 {mod}`raven_toolbox.data`; building and publishing it is a maintainer task — see
-[Maintaining KEGG data](../maintenance/maintaining_kegg_data.md) and the
-[KEGG data format](../maintenance/kegg_data_format.md).
+[Maintaining KEGG data](https://github.com/SysBioChalmers/raven-gecko-parity/blob/main/docs/maintaining_kegg_data.md) and the
+[KEGG data format](https://github.com/SysBioChalmers/raven-gecko-parity/blob/main/docs/kegg_data_format.md)
+(both raven-gecko-parity).
 
 After drafting, fill connectivity gaps with the
 [gap-filling guide](tasks_and_gapfilling.md).

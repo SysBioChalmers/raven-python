@@ -53,19 +53,12 @@ def merge_linear(
     ``no_merge`` reaction ids are never merged. The reduced model carries no genes
     (merging makes GPRs meaningless); scores are remapped with
     :func:`group_rxn_scores`.
-
-    Each pass recomputes the metabolite→reaction incidence fresh, then merges over the
-    degree-2 metabolites found at the start of the pass. A metabolite that only
-    *becomes* degree-2 mid-pass (because one of its reactions was just merged into a
-    survivor) is therefore picked up on the next pass rather than immediately — linear
-    merging is confluent, so the final grouping is the same regardless, it just takes a
-    few extra passes on long chains. (RAVEN re-finds incidence per metabolite and so
-    finishes a chain in one pass; the end result is equivalent.)
     """
     banned = set(no_merge)
     orig_ids = [r.id for r in model.reactions]
     group_of: dict[str, int] = {rid: 0 for rid in orig_ids}
     reversed_of: dict[str, bool] = {rid: False for rid in orig_ids}
+    group_members: dict[int, set[str]] = {}  # non-zero group -> its original reaction ids
     next_group = 1
 
     rxns = [
@@ -78,7 +71,7 @@ def merge_linear(
         rx.coeffs = {m: -c for m, c in rx.coeffs.items()}
         rx.lb, rx.ub = -rx.ub, -rx.lb
         grp = group_of[rx.id]
-        targets = [o for o in orig_ids if group_of[o] == grp] if grp else [rx.id]
+        targets = group_members[grp] if grp else (rx.id,)
         for o in targets:
             reversed_of[o] = not reversed_of[o]
 
@@ -88,10 +81,12 @@ def merge_linear(
             return
         if old == 0:
             group_of[rx.id] = grp
+            group_members.setdefault(grp, set()).add(rx.id)
         else:
-            for o in orig_ids:
-                if group_of[o] == old:
-                    group_of[o] = grp
+            members = group_members.pop(old)
+            for o in members:
+                group_of[o] = grp
+            group_members.setdefault(grp, set()).update(members)
 
     while True:
         incidence: dict[str, list[int]] = defaultdict(list)

@@ -23,7 +23,7 @@ Data-bundle resolver (KEGG artefacts and template-model data).
 
 ## `raven_toolbox.manifest`
 
-Loads a shared [data/binary manifest](../../maintenance/data_manifest.md) into the two
+Loads a shared [data/binary manifest](https://github.com/SysBioChalmers/raven-gecko-parity/blob/main/docs/data_manifest.md) (raven-gecko-parity) into the two
 registries above (and is consulted lazily via `$RAVEN_PYTHON_MANIFEST`).
 
 ```{eval-rst}

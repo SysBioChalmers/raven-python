@@ -9,16 +9,17 @@
 that is unique to RAVEN:
 
 - **De novo reconstruction** from KEGG and protein homology (BLAST / DIAMOND).
-- **Context-specific models** from omics data via **tINIT / ftINIT**, with task-aware
-  gap-filling and the linear-merge MILP reduction.
+- **Context-specific models** from omics data via **ftINIT**, with task-aware gap-filling,
+  the linear-merge MILP reduction, and metabolomics-informed reaction scoring.
 - **Metabolic-task** validation (`check_tasks`, `find_task_essential_reactions`).
-- **Connectivity gap-filling** against template models.
+- **Gap-filling** — connectivity gap-filling against template models, plus LP/SWIFTCORE,
+  MILP, and topological strategies.
 - **Omics integration** — Human Protein Atlas (proteomics + RNA-seq) ingestion.
 - **Sub-cellular localisation** prediction by MILP, with partial-update mode and pluggable
   evidence sources (DeepLoc 2, MULocDeep, COMPARTMENTS, UniProt, …).
 - **N-model comparison**; **reporter metabolites**; **FSEOF**; **flux sampling**.
 - **YAML I/O** following the cobra standard, plus geckopy's `ec-*` enzyme-constrained
-  fields; **SIF** export; **RAVEN-style Excel** export.
+  fields, and **RAVEN-style Excel** export.
 
 :::{admonition} Design principle
 :class: tip
@@ -52,7 +53,7 @@ The function-by-function map from RAVEN to raven-toolbox (and cobrapy).
 :link: guide/index
 :link-type: doc
 
-Task-oriented how-tos for each capability — reconstruction, tINIT, tasks, omics, …
+Task-oriented how-tos for each capability — reconstruction, ftINIT, tasks, omics, …
 :::
 
 :::{grid-item-card} 🔍 API reference
@@ -66,11 +67,15 @@ Every public function and class, generated from the docstrings.
 ## Status
 
 raven-toolbox has been validated against MATLAB RAVEN on **Human-GEM** (5 Hart2015 cell-line
-models, Jaccard 0.975–0.980 — see [the Human-GEM validation study](studies/humangem_validation.md)).
-The functional scope of the original toolbox is covered, with two principled omissions:
-**MetaCyc-based reconstruction** (flagged for removal from MATLAB RAVEN too) and **dynamic
-FBA** (well covered by other maintained Python packages). What's still open is catalogued in
-[the to-do list](reference/todo.md).
+models, Jaccard 0.975–0.980 — see
+[the Human-GEM validation study](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/humangem-validation.md)
+on raven-docs). Two deliberate scope decisions, not pending work: **classic tINIT is not
+implemented** — only ftINIT, since raven-toolbox has no installed base of tINIT-built models
+to support, unlike MATLAB RAVEN, which keeps both algorithms for backwards compatibility;
+**MetaCyc-based reconstruction** is not implemented (flagged for removal from MATLAB RAVEN
+too); and **dynamic FBA** is not implemented (well covered by other maintained Python
+packages). Candidates for back-porting to MATLAB RAVEN are catalogued in
+[the improvements list](reference/improvements.md).
 
 ```{toctree}
 :hidden:
@@ -103,26 +108,7 @@ studies/index
 
 ```{toctree}
 :hidden:
-:caption: Maintenance
-
-maintenance/index
-```
-
-```{toctree}
-:hidden:
 :caption: Project
 
-reference/changelog
 reference/todo
-reference/known_issues
-```
-
-```{toctree}
-:hidden:
-:caption: Design archive
-
-archive/binary_provisioning_plan
-archive/ftinit_review_and_plan
-archive/localization_design
-archive/plan_get_model_from_homology
 ```

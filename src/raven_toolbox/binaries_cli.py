@@ -12,7 +12,8 @@ bundles for the current platform::
 Tools already on ``PATH`` (or pointed at by ``RAVEN_PYTHON_*``) are left as-is
 unless ``--force-download`` is given. Tools with no bundle for this OS/arch
 (e.g. MAFFT/CD-HIT on native Windows) are reported as unavailable with a
-conda/WSL2 hint — see docs/maintenance/maintaining_binaries.md.
+conda/WSL2 hint — see
+https://github.com/SysBioChalmers/raven-gecko-parity/blob/main/docs/maintaining_binaries.md.
 """
 from __future__ import annotations
 
@@ -33,6 +34,11 @@ def _print_sets() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse CLI arguments and provision the requested binaries.
+
+    Prints a per-tool status line and returns the process exit code: ``0`` if
+    every tool ended up present or downloaded, ``1`` if any download failed.
+    """
     parser = argparse.ArgumentParser(
         prog="raven-toolbox-binaries",
         description="Download raven-toolbox's external binaries for this platform.",
@@ -76,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
             f"{', '.join(r.executable for r in unavailable)}.\n"
             "Install them via conda (`conda install -c bioconda <tool>`) or, on "
             "native Windows for HMMER/MAFFT/CD-HIT, run inside WSL2 (see "
-            "docs/maintenance/maintaining_binaries.md)."
+            "https://github.com/SysBioChalmers/raven-gecko-parity/blob/main/docs/maintaining_binaries.md)."
         )
     if errors:
         print(f"\n{len(errors)} download(s) failed:")

@@ -1,4 +1,4 @@
-"""Tests for raven_toolbox.io.yaml against the RAVEN fa281a1 (cobra-native !!omap) schema."""
+"""Tests for raven_toolbox.io.yaml against the RAVEN cobra-native (!!omap) schema."""
 from pathlib import Path
 
 import cobra
@@ -7,7 +7,7 @@ from cobra.io.yaml import yaml as cobra_yaml
 
 from raven_toolbox.io import read_yaml_model, write_yaml_model
 
-# A model laid out exactly as RAVEN writeYAMLmodel (fa281a1) emits: cobra-native
+# A model laid out exactly as RAVEN writeYAMLmodel emits: cobra-native
 # structure, RAVEN-only fields as top-level per-entry keys, smiles/ec-code inside
 # the annotation block, metaData provenance-only, id/name/version top-level,
 # plus the GECKO ec-* sections that populate `model.ec`.
@@ -141,6 +141,20 @@ def test_round_trip(yaml_file, tmp_path):
     assert reloaded.ec.mw[0] == 50000.0
 
 
+def test_round_trip_preserves_unknown_metadata_field(yaml_file, tmp_path):
+    """A metaData key with no RAVEN-defined slot (e.g. geckopy's
+    geckopy_version) survives a write/read round trip alongside a normal
+    RAVEN annotation field (taxonomy), instead of being silently dropped."""
+    model = read_yaml_model(yaml_file)
+    model.notes["metaData"]["geckopy_version"] = "0.2.1"
+    out = tmp_path / "out.yml"
+    write_yaml_model(model, out)
+    reloaded = read_yaml_model(out)
+
+    assert reloaded.notes["metaData"]["geckopy_version"] == "0.2.1"
+    assert reloaded.notes["metaData"]["taxonomy"] == "taxonomy/559292"
+
+
 def test_extra_notes_not_dropped_when_free_text_note_present(yaml_file, tmp_path):
     """An entry with both a RAVEN free-text note and an extra note keeps both on write."""
     model = read_yaml_model(yaml_file)
@@ -190,6 +204,34 @@ def test_write_emits_raven_top_level_keys(yaml_file, tmp_path):
     assert "deltaG:" in text
     assert "confidence_score:" in text
     assert "metaData:" in text
+
+
+def test_write_emits_yaml_infinity_token_for_unbounded_reaction(tmp_path):
+    """cobra's own model_to_dict stringifies an infinite or NaN bound as
+    e.g. "inf" (JSON has no literal for either) --- its own reader tolerates
+    this, unconditionally casting both bound fields through float(v). Left
+    as a string rather than converted back, ruamel has no reason to emit
+    the YAML 1.1 infinity token (.inf) and writes the bare word "inf"
+    instead, which is not that token and parses back as the *string* "inf"
+    on any YAML reader that doesn't share cobra's specific convention
+    (confirmed against ruamel's own round-trip and safe loaders, and
+    PyYAML's safe_load: bare "inf" parses as a string on every one of
+    them). writeYAMLmodel.m emits .inf here regardless."""
+    m = cobra.Model("t")
+    a = cobra.Metabolite("a_c", compartment="c")
+    m.add_metabolites([a])
+    r = cobra.Reaction("R1", lower_bound=0, upper_bound=float("inf"))
+    r.add_metabolites({a: 1})
+    m.add_reactions([r])
+
+    out = tmp_path / "m.yml"
+    write_yaml_model(m, out)
+    text = out.read_text()
+    assert "upper_bound: .inf" in text
+    assert "upper_bound: inf\n" not in text  # the malformed, non-spec token
+
+    reloaded = read_yaml_model(out)
+    assert reloaded.reactions.get_by_id("R1").upper_bound == float("inf")
 
 
 def test_legacy_id_in_metadata(tmp_path):
