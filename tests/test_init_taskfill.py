@@ -191,7 +191,17 @@ def test_reference_model_is_unchanged_and_reusable_after_gap_fill():
     went in: no leaked _fill_* variables/constraints, no changed reaction bounds or
     objective, no leaked Gurobi solver parameters -- and still gap-fill correctly a
     second time, proving nothing from the first call stuck around to corrupt it."""
+    import importlib
+
+    import pytest
+
+    try:  # real import, not find_spec: optlang ships the module even without gurobipy
+        importlib.import_module("optlang.gurobi_interface")
+    except ImportError:
+        pytest.skip("gurobi is not installed; this test pins Gurobi-specific solver state")
+
     ref = _reference_without_exchanges()
+    ref.solver = "gurobi"  # the state this test pins (.problem.Params) is Gurobi-specific
     ref.solver.problem.Params.Threads = 3  # distinct from _set_fill_solver's own Threads=1
 
     bounds_before = {r.id: r.bounds for r in ref.reactions}
