@@ -6,14 +6,9 @@ Milestones in the raven-toolbox port. For function-level status see
 
 ## 3.0.0b1 — 2026-09-07
 
-First beta toward 3.0, matching the upcoming MATLAB RAVEN 3.0 beta: classic tINIT removed in
-favour of ftINIT-only, thirteen new RAVEN ports, ftINIT's metabolomics production-bonus, and a
-run of parity fixes and hot-path performance work.
+First beta toward 3.0, matching the upcoming MATLAB RAVEN 3.0 beta.
 
-* **Breaking: removed classic tINIT** (`init.run_init`, `init.get_init_model`). raven-toolbox
-  is a new implementation with no installed base to keep it for, unlike MATLAB RAVEN, which
-  keeps both algorithms for backwards compatibility; `ftinit()` is now the only extraction
-  pipeline.
+* keep `ftinit()` as the only extraction pipeline.
 * `analysis.compare_fluxes` replaces `follow_changed` — a `compareFluxes` port, following RAVEN
   dropping `followChanged`/`followFluxes`/`mapCompartments`.
 * `comparison.compare_models` gained EC-code / metabolite-name / equation overlap matrices,
@@ -39,8 +34,6 @@ run of parity fixes and hot-path performance work.
   faster on a genome-scale extraction.
 * Fixed three ftINIT/task-essential bugs: a task-essential boundary default, a checkpoint
   file-handle leak, and a non-finite tie-break objective.
-* Tried and dropped a stability-anchoring `reference_reactions` ftINIT parameter after it
-  worsened drift on a real curation test — see the postmortem linked from the study docs.
 * `manipulation.close_model` boundary-reaction detection is now structural, matching RAVEN.
 * `manipulation.convert_to_irreversible` now splits exchange reactions too, carries a negative
   objective coefficient onto the reverse reaction, and gained an optional `rxns` restriction.
@@ -184,101 +177,3 @@ formats (YAML / SIF / Excel). Validated against MATLAB RAVEN on Human-GEM (Jacca
 * Sphinx + MyST documentation site.
 * Not yet implemented: visualization, metabolomics-based (f)tINIT scoring, published
   binary/KEGG-artefact release bundles.
-
-The milestone sections below record the incremental development history leading to this release.
-
-## Infrastructure
-
-* GitHub Actions CI — ruff + pytest matrix over Python 3.11/3.12/3.13; Gurobi-only tests
-  auto-skip on free runners.
-
-## Quality sweep — known-issues section F (design-choice divergences)
-
-* `run_init` docstring documents the score-0 semantics divergence between classic INIT and
-  ftINIT.
-* `fseof` classifier now uses the slope of `|flux|` instead of first-vs-last endpoints.
-* `reporter_metabolites` docstring documents the one-sided p-value + z-score ordering.
-* `get_elemental_balance` now reports `unknown` for empty-stoichiometry reactions.
-
-## Quality sweep — known-issues sections C / D / E
-
-* `constrain_reversible_reactions` wraps FVA in try/except + NaN check, raising one clear error.
-* `ensure_binary` downloads through `.part` + `os.replace` for atomicity.
-* `parse_task_list` and `parse_taxonomy` raise/warn clearly on malformed input instead of a bare
-  `KeyError` or silent gap.
-* `group_linear_reactions` and `parse_kegg_reactions` rewritten to avoid redundant rescans.
-* Dropped dead code: `KeggReaction.modules`/`.rhea`, the vestigial `only_genes_in_models` param.
-
-## Quality sweep — known-issues section B
-
-* `merge_models` warns on `formula`/`charge` conflicts instead of silently keeping the first-seen.
-* `add_reactions_from_equations` warns when creating a metabolite in an unregistered compartment.
-* `parse_task_list` warns on continuation data appearing before any task ID.
-* `export_model_to_sif` warns on a custom label map that collapses two ids onto one label.
-
-## Quality sweep — known-issues section A
-
-* `add_reactions_from_equations` no longer misparses a leading-number metabolite name, and warns
-  when an equation's terms cancel to a zero-metabolite reaction.
-* `add_reactions_from_model` avoids id collisions between two source metabolites in one batch.
-* `add_transport_reactions` warns on duplicate metabolite names instead of silently dropping.
-* `connect_blocked_reactions` guards an FVA-result lookup; `assign_kos` rejects `cutoff >= 1`.
-
-## Phase 7 — Localization
-
-* Sub-cellular localisation by MILP: `predict_localization` / `apply_localization`.
-* Predictor loaders `load_wolfpsort`, `load_deeploc`.
-* Compartment helpers `merge_compartments`, `copy_to_compartment`.
-* Validated on yeast-GEM (accuracy 0.72–0.39 depending on predictor confidence).
-
-## Phase 5 — Data integration & analysis
-
-* Reporter metabolites, FSEOF, random sampling (`analysis/`).
-* HPA omics ingestion (`omics.parse_hpa`, `parse_hpa_rna`, `hpa_gene_scores`, `rna_gene_scores`).
-* N-model comparison (`comparison.compare_models`).
-* Dynamic FBA not ported — covered by existing Python packages (`dfba`, `reframed`, `mewpy`).
-
-## Phase 4d — ftINIT
-
-* ftINIT pipeline (`init.ftinit`): staged MILP, linear merge, task-aware gap-filling, gene pruning.
-* Validated against MATLAB RAVEN on Human-GEM (Jaccard 0.973–0.980).
-* Parameter calibration study: `mip_gap=0.01` is the genome-scale sweet spot.
-* Cross-solver portability: Gurobi and GLPK pass at toy scale; only Gurobi viable genome-scale.
-* Genome-scale performance work: `check_tasks`/`fill_tasks._feasible` rewritten (~12× each);
-  bounded gap-fill MILP; `rescaleModelForINIT` ported.
-
-## Phase 4c — tINIT
-
-* INIT MILP and the tINIT pipeline (`init.run_init`, `init.get_init_model`).
-
-## Phase 4b — Gap-filling
-
-* Connectivity gap-filling (`gapfilling.connect_blocked_reactions`).
-
-## Phase 4a — Metabolic tasks
-
-* Task list parsing + `check_tasks` (`tasks/`).
-
-## Phase 3 — Reconstruction
-
-* Homology-based draft from a template GEM + BLAST/DIAMOND wrappers (`reconstruction/homology/`).
-* KEGG five-step pipeline (`reconstruction/kegg/`): dump → parser → HMM library → species model
-  → HMM-query draft.
-* MetaCyc reconstruction not ported (flagged for removal from MATLAB RAVEN too).
-
-## Phase 2 — I/O
-
-* YAML aligned to cobra's `!!omap` writer, RAVEN-only fields preserved into `.notes`, geckopy
-  `ec-*` fields for enzyme-constrained models.
-* SIF, Excel export, and the Standard-GEM `model/<fmt>/…` git layout. Excel import excluded.
-
-## Phase 1 — Foundation
-
-* GPR / balance / validation / parsing helpers (`utils/`).
-* Manipulation ergonomic layer (`manipulation/`).
-* External-binary resolver (`binaries.py`) — version-pinned release-ZIP registry, SHA256-verified.
-
-## Phase 0 — Scaffold
-
-* Project structure, packaging, pytest skeleton, license alignment with MATLAB RAVEN
-  (GPL-3.0-or-later).
