@@ -112,10 +112,3 @@ studies/index
 
 reference/todo
 ```
-
-```{toctree}
-:hidden:
-:caption: Maintenance
-
-maintenance/parameter_defaults
-```
