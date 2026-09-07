@@ -1,10 +1,9 @@
 """The single-step ftINIT MILP (run_ftinit).
 
-Validated on the testModel oracle against (a) a hand-checked score-optimal solution,
-(b) the formulation invariants, and (c) exact agreement with the already-tested
-run_init. The full-pipeline RAVEN outputs (tinitTests T0001/T0002) additionally
-involve linear merge + the toIgnore masks + staging + exchange re-adding, covered
-elsewhere.
+Validated on the testModel oracle against (a) a hand-checked score-optimal solution
+and (b) the formulation invariants. The full-pipeline RAVEN outputs (tinitTests
+T0001/T0002) additionally involve linear merge + the toIgnore masks + staging +
+exchange re-adding, covered elsewhere.
 
 Note on the toy result: with strict mass balance and no metabolite-production reward
 (ftINIT, unlike classic INIT, only rewards metabolomics-detected mets), the
@@ -19,7 +18,7 @@ import cobra
 import pytest
 from tinit_oracles import TEST_MODEL_SCORES, expr_for_rxn_score, make_test_model
 
-from raven_toolbox.init import FtInitResult, run_ftinit, run_init
+from raven_toolbox.init import FtInitResult, run_ftinit
 from raven_toolbox.init.ftinit import _EXTRACT_SEED
 from raven_toolbox.init.score import gene_scores_from_expression, score_reactions_from_genes
 
@@ -48,20 +47,6 @@ def test_kept_reactions_carry_flux_and_balance():
         assert abs(res.fluxes[rid]) > 1e-9
     # The extracted model is itself feasible/flux-consistent.
     assert res.model.slim_optimize() is not None
-
-
-def test_agrees_with_run_init():
-    """Exact agreement with the classic INIT MILP (no production reward, no rev loops).
-
-    run_init splits reversibles and double-scores both directions unless no_rev_loops,
-    so we compare under matching settings: same objective and same kept set.
-    """
-    model = make_test_model()
-    scores = _scores(model)
-    ft = run_ftinit(model, scores)
-    init = run_init(model, scores, prod_weight=0.0, eps=0.1, no_rev_loops=True)
-    assert set(ft.kept_reactions) == {r.id for r in init.model.reactions}
-    assert ft.objective == pytest.approx(init.objective, abs=1e-6)
 
 
 def test_essential_force_clamps_to_capacity():

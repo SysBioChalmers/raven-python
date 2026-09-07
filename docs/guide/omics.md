@@ -10,8 +10,7 @@ scores that drive context-specific extraction.
 
 Both return tidy pandas DataFrames, and the scoring adapters reuse
 {func}`raven_toolbox.init.score_reactions_from_genes` (a single source of truth for the GPR
-walk), so omics-derived scores plug straight into
-{func}`raven_toolbox.init.ftinit` / {func}`raven_toolbox.init.get_init_model` — see the
+walk), so omics-derived scores plug straight into {func}`raven_toolbox.init.ftinit` — see the
 [context-specific modeling guide](context_specific.md).
 
 `HPA_LEVEL_SCORES` exposes the categorical-level → score mapping used for the proteomics

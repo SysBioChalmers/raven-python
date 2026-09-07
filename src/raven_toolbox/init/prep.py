@@ -198,6 +198,8 @@ def prep_init_model(
     essential_cache_path=None,
     simplify: bool = True,
     scale: bool = True,
+    verbose: bool = False,
+    processes: int = 1,
 ) -> PrepData:
     """Build :class:`PrepData` from a template model — the once-per-template work shared
     by every ftINIT sample on this model.
@@ -218,10 +220,21 @@ def prep_init_model(
     ``prepINITModel`` (which calls ``closeModel`` first), rather than
     :func:`find_task_essential_reactions`'s own additive default — see the comment at the
     call site for why the two callers differ.
+
+    ``verbose`` prints one line per phase (matching ``prepINITModel``'s numbered steps in
+    spirit) plus per-task progress during essential-reaction discovery; silent by default.
+
+    ``processes`` (default 1) parallelises task-essential discovery across tasks — see
+    :func:`find_task_essential_reactions`. It does not affect the two ``simplify_model``
+    passes below; those parallelise via cobra's own ``cobra.Configuration().processes``
+    (set that separately if you want them faster too).
     """
     ref_model = template.copy()
 
     if simplify:
+        if verbose:
+            print("[prep] first simplification (drop dead-end / zero-flux reactions)",
+                  flush=True)
         # RAVEN prepINITModel "first simplification":
         # simplifyModel(model, deleteUnconstrained, ~deleteDuplicates, deleteZeroInterval,
         # deleteInaccessible, deleteMinMax). Drop reactions that cannot carry steady-state
@@ -250,8 +263,11 @@ def prep_init_model(
         # wrong here: on Human-GEM, whose 1660 exchanges all ship open, it collapses the
         # task-essential set from ~206 reactions to 1, silently removing the task
         # constraint from every ftINIT extraction.
+        if verbose:
+            print(f"[prep] finding task-essential reactions ({len(tasks)} task(s))", flush=True)
         ess = find_task_essential_reactions(ref_model, tasks, close_boundaries=True,
-                                            cache_path=essential_cache_path)
+                                            cache_path=essential_cache_path, verbose=verbose,
+                                            processes=processes)
         essential_pre = ess.reactions
         task_mets = ess.task_metabolites
         kept_tasks = [t for t in tasks if t.id not in ess.failed_tasks]
@@ -262,6 +278,8 @@ def prep_init_model(
         _orient_forward(ref_model.reactions.get_by_id(rid), direction)
 
     if simplify:
+        if verbose:
+            print("[prep] second simplification (FVA + tighten reversibility)", flush=True)
         # RAVEN prepINITModel "second simplification":
         # simplifyModel(minModel1, ..., constrainReversible=true). FVA every reversible
         # reaction and make one-way-only ones irreversible *before* the linear merge. This
@@ -269,12 +287,19 @@ def prep_init_model(
         # skipping it leaves a larger merged model and a different MILP optimum.
         simplify_model(ref_model, constrain_reversible=True)
 
+    if verbose:
+        print("[prep] classifying reactions and merging linear chains", flush=True)
     masks = classify_reactions(ref_model, ext_comp=ext_comp,
                                spontaneous=spontaneous, custom=custom)
 
     min_model, orig_ids, group_ids, reversed_rxns = merge_linear(ref_model)
     if scale:  # compress stoichiometric dynamic range so the MILP big-M fits all reactions
+        if verbose:
+            print("[prep] rescaling merged model", flush=True)
         rescale_for_init(min_model)
+    if verbose:
+        print(f"[prep] done: {len(min_model.reactions)} reactions in min_model, "
+              f"{len(essential_pre)} essential (pre-merge)", flush=True)
     group_of = dict(zip(orig_ids, group_ids, strict=True))
 
     # Map essentials to the merged model: the survivor of each group containing an

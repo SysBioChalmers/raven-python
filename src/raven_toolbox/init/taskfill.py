@@ -23,7 +23,7 @@ import cobra
 from cobra.exceptions import OptimizationError
 from optlang.symbolics import Real, add, mul
 
-from raven_toolbox.manipulation.boundary import close_model
+from raven_toolbox.manipulation.boundary import close_model_in_place
 from raven_toolbox.tasks import Task
 from raven_toolbox.tasks.check import (
     _metabolite_bounds,
@@ -126,6 +126,35 @@ def _set_fill_solver(model: cobra.Model, time_limit: float | None, seed: int) ->
             model.solver.configuration.timeout = int(time_limit)
 
 
+def _snapshot_solver_params(model: cobra.Model):
+    """Save whatever :func:`_set_fill_solver` is about to overwrite.
+
+    ``model.solver.problem.Params`` (Gurobi) and ``model.solver.configuration.timeout``
+    (the generic optlang fallback) are raw solver state, not cobra/optlang model
+    attributes — ``with model:`` does not know about them and will not revert them on
+    exit, unlike everything else :func:`_gap_fill_task` touches on a shared reference
+    model. Pair with :func:`_restore_solver_params`.
+    """
+    try:  # Gurobi-specific; harmless on other backends
+        params = model.solver.problem.Params
+        return "gurobi", (params.Threads, params.Seed, params.IntFeasTol, params.TimeLimit)
+    except Exception:  # noqa: BLE001
+        return "generic", model.solver.configuration.timeout
+
+
+def _restore_solver_params(model: cobra.Model, saved) -> None:
+    """Undo :func:`_set_fill_solver`, from a snapshot taken by :func:`_snapshot_solver_params`."""
+    kind, value = saved
+    if kind == "gurobi":
+        try:  # noqa: BLE001 - if this now fails, the params were never changed either
+            params = model.solver.problem.Params
+            params.Threads, params.Seed, params.IntFeasTol, params.TimeLimit = value
+        except Exception:  # noqa: BLE001
+            pass
+    else:
+        model.solver.configuration.timeout = value
+
+
 def _resolve_ties_fill(work, prob, candidates, cost_expr, time_limit) -> list[str] | None:
     """Pin the degenerate min-cost gap-fill to a single, reproducible set (on ``work``).
 
@@ -197,63 +226,104 @@ def _gap_fill_task(
 ) -> list[str]:
     """Min-cost reference reactions that make ``task`` feasible (RAVEN ``ftINITFillGaps``).
 
-    The MILP runs on a **closed copy of the reference model**, which already contains every
-    candidate reaction, rather than copying candidates into the target model one at a time.
-    This mirrors RAVEN's ``fullModel = tRefModel``: copying the (thousands of) candidate
-    reactions into a genome-scale model per task dominates runtime and can overflow the
-    recursion limit, so a per-task copy risks never returning an incumbent within the time
-    limit.
+    The MILP runs directly on ``reference_model``, closed and holding every candidate
+    reaction already, rather than copying candidates into the target model one at a
+    time (mirrors RAVEN's ``fullModel = tRefModel``) — copying the (thousands of)
+    candidate reactions into a genome-scale model per task dominates runtime and can
+    overflow the recursion limit, so a per-task copy risks never returning an
+    incumbent within the time limit.
+
+    Everything done to ``reference_model`` here is reverted before returning, same
+    as if it were never touched: closing boundaries, the added binary variables and
+    constraints, and the objective are all cobra/optlang context-tracked and undone
+    by ``with reference_model:`` on the way out. Two things are not tracked and are
+    snapshotted/restored by hand instead — the metabolite constraint bounds
+    ``apply_task_constraints`` edits directly (same as :func:`_feasible`), and the
+    raw Gurobi parameters :func:`_set_fill_solver` sets (``model.solver.problem.Params``
+    is not a cobra/optlang attribute cobra's context system knows about). This matters
+    because ``reference_model`` is ``prep.ref_model`` — shared and reused across every
+    sample built from the same :class:`~raven_toolbox.init.PrepData`, so a change that
+    leaked out of one task's gap-fill (single-threaded, 300 s time limit) would still
+    be sitting there for the next sample's extraction.
+
+    A prior version copied ``reference_model`` per call instead of mutating it in
+    place, since that copy is what RAVEN's ``fullModel = tRefModel`` does too and it
+    is cheap there — MATLAB arrays copy in a memcpy. ``cobra.Model.copy()`` on a
+    Gurobi-backed model is not that: it deep-copies through pickle's
+    ``__getstate__``/``__setstate__``, which rebuilds every variable and constraint
+    from its sympy expression one at a time, and on a genome-scale reference model
+    that rebuild dominated gap-fill runtime far more than the MILP solve itself (the
+    same lesson :func:`_feasible` already applied to the per-task feasibility check,
+    just not yet extended to this, the more expensive of the two copies it replaced).
 
     Every reference reaction not already ``present`` in the target model is gated by a binary
     (off ⇒ no flux) and its cost minimised subject to the task's ranged metabolite bounds.
     Returns the ids of the reactions the MILP turns on.
     """
-    work = close_model(reference_model)  # task I/O via the task's b; holds all candidates
-    candidates = [r.id for r in work.reactions if r.id not in present_ids and not r.boundary]
-    if not candidates:  # nothing to add → task cannot be made feasible
-        raise OptimizationError(f"gap-filling found no candidates for task {task.id!r}.")
-    name_to_id, comp_to_ids = task_name_maps(work)
-    _, error = apply_task_constraints(work, task, name_to_id, comp_to_ids)
-    if error is not None:
-        raise OptimizationError(
-            f"task {task.id!r} could not be applied to the reference: {error}"
-        )
+    saved_solver_params = _snapshot_solver_params(reference_model)
+    try:
+        with reference_model:
+            close_model_in_place(reference_model)  # task I/O via the task's b; holds all candidates
+            candidates = [r.id for r in reference_model.reactions
+                          if r.id not in present_ids and not r.boundary]
+            if not candidates:  # nothing to add → task cannot be made feasible
+                raise OptimizationError(f"gap-filling found no candidates for task {task.id!r}.")
+            name_to_id, comp_to_ids = task_name_maps(reference_model)
+            # apply_task_constraints edits these constraint bounds directly, bypassing
+            # cobra's context tracking (same as _feasible) — snapshot before, restore after.
+            met_bounds, _ = _metabolite_bounds(task, name_to_id, comp_to_ids)
+            saved_met_bounds = {
+                mid: (reference_model.constraints[mid].lb, reference_model.constraints[mid].ub)
+                for mid in met_bounds
+            }
+            try:
+                _, error = apply_task_constraints(reference_model, task, name_to_id, comp_to_ids)
+                if error is not None:
+                    raise OptimizationError(
+                        f"task {task.id!r} could not be applied to the reference: {error}"
+                    )
 
-    prob = work.problem
-    extras = []
-    objective_terms = []
-    for cid in candidates:
-        rxn = work.reactions.get_by_id(cid)
-        y = prob.Variable(f"_fill_{cid}", type="binary")
-        # off ⇒ no flux; on ⇒ the reaction's own bounds apply.
-        extras += [
-            y,
-            prob.Constraint(rxn.flux_expression - rxn.upper_bound * y, ub=0.0, name=f"_fillub_{cid}"),
-            prob.Constraint(rxn.flux_expression - rxn.lower_bound * y, lb=0.0, name=f"_filllb_{cid}"),
-        ]
-        objective_terms.append(mul([Real(costs[cid]), y]))
-    work.add_cons_vars(extras)
-    # add() over a flat list, not Python sum() — the latter is O(n²) in sympy and with
-    # thousands of candidates dominates gap-fill runtime (see ftINIT/tINIT, same fix).
-    cost_expr = add(objective_terms)
-    work.objective = prob.Objective(cost_expr, direction="min")
-    _set_fill_solver(work, time_limit, seed)
-    work.slim_optimize()
-    # Accept a near-optimal incumbent (time_limit); only a truly infeasible fill (no
-    # incumbent) means the task cannot be satisfied from the reference.
-    if work.solver.status not in ("optimal", "feasible", "suboptimal", "time_limit") or \
-            work.variables[f"_fill_{candidates[0]}"].primal is None:
-        raise OptimizationError(f"gap-filling found no way to make task {task.id!r} feasible.")
+                work = reference_model
+                prob = work.problem
+                extras = []
+                objective_terms = []
+                for cid in candidates:
+                    rxn = work.reactions.get_by_id(cid)
+                    y = prob.Variable(f"_fill_{cid}", type="binary")
+                    # off ⇒ no flux; on ⇒ the reaction's own bounds apply.
+                    extras += [
+                        y,
+                        prob.Constraint(rxn.flux_expression - rxn.upper_bound * y, ub=0.0, name=f"_fillub_{cid}"),
+                        prob.Constraint(rxn.flux_expression - rxn.lower_bound * y, lb=0.0, name=f"_filllb_{cid}"),
+                    ]
+                    objective_terms.append(mul([Real(costs[cid]), y]))
+                work.add_cons_vars(extras)
+                # add() over a flat list, not Python sum() — the latter is O(n²) in sympy and with
+                # thousands of candidates dominates gap-fill runtime (see ftINIT/tINIT, same fix).
+                cost_expr = add(objective_terms)
+                work.objective = prob.Objective(cost_expr, direction="min")
+                _set_fill_solver(work, time_limit, seed)
+                work.slim_optimize()
+                # Accept a near-optimal incumbent (time_limit); only a truly infeasible fill (no
+                # incumbent) means the task cannot be satisfied from the reference.
+                if work.solver.status not in ("optimal", "feasible", "suboptimal", "time_limit") or \
+                        work.variables[f"_fill_{candidates[0]}"].primal is None:
+                    raise OptimizationError(f"gap-filling found no way to make task {task.id!r} feasible.")
 
-    chosen = [cid for cid in candidates
-              if (work.variables[f"_fill_{cid}"].primal or 0.0) > 0.5]
-    # best-effort: pin the degenerate min-cost fill to the fewest, lowest-id
-    # reactions so the added set does not depend on the solver seed/version.
-    if resolve_ties:
-        canon = _resolve_ties_fill(work, prob, candidates, cost_expr, time_limit)
-        if canon is not None:
-            chosen = canon
-    return chosen
+                chosen = [cid for cid in candidates
+                          if (work.variables[f"_fill_{cid}"].primal or 0.0) > 0.5]
+                # best-effort: pin the degenerate min-cost fill to the fewest, lowest-id
+                # reactions so the added set does not depend on the solver seed/version.
+                if resolve_ties:
+                    canon = _resolve_ties_fill(work, prob, candidates, cost_expr, time_limit)
+                    if canon is not None:
+                        chosen = canon
+                return chosen
+            finally:
+                for mid, (lb, ub) in saved_met_bounds.items():
+                    _set_constraint_bounds(reference_model.constraints[mid], lb, ub)
+    finally:
+        _restore_solver_params(reference_model, saved_solver_params)
 
 
 def fill_tasks(
@@ -265,11 +335,13 @@ def fill_tasks(
     time_limit: float | None = _FILL_TIME_LIMIT,
     seed: int = _FILL_SEED,
     resolve_ties: bool = False,
+    verbose: bool = False,
 ) -> TaskFillResult:
     """Add minimum-cost reference reactions so every task is feasible in ``model``.
 
-    Port of RAVEN ``ftINITFillGapsForAllTasks``: task by task, if a task is infeasible in
-    the (growing) model, :func:`_gap_fill_task` finds the minimum-cost set of reference
+    Port of RAVEN ``fitTasks`` with ``gapFillMode`` ``'preMerged'`` (ftINIT's mode): task by
+    task, if a task is infeasible in the (growing) model, :func:`_gap_fill_task` finds the
+    minimum-cost set of reference
     reactions that restores it and they are added, carrying forward so later tasks see the
     earlier additions. ``reference_model`` supplies the candidates (its reactions not yet in
     the model, excluding exchange/boundary reactions); ``rxn_scores`` (original reaction id →
@@ -286,18 +358,25 @@ def fill_tasks(
     model). The returned model keeps its boundary reactions. Tasks that could not be filled
     are returned in ``failed_tasks`` **and** raised as a warning — a non-empty list means the
     context model cannot perform those tasks, which callers should not ignore silently.
+
+    ``verbose`` prints one line per task (added count and running total, matching RAVEN
+    ``fitTasks``'s per-task report), silent by default.
     """
     scores = dict(rxn_scores or {})
     tasks = list(tasks)
+    n_tasks = len(tasks)
 
     out = model.copy()
     added: list[str] = []
     failed: list[str] = []
-    for task in tasks:
+    for i, task in enumerate(tasks):
         if task.should_fail:
             continue
         name_to_id, comp_to_ids = task_name_maps(out)
         if _feasible(out, task, name_to_id, comp_to_ids):
+            if verbose:
+                print(f"[{i + 1}/{n_tasks}] {task.id}: already feasible, "
+                      f"0 reaction(s) added, {len(added)} total", flush=True)
             continue
         # Candidates are the reference reactions not yet in the (growing) model.
         present = {r.id for r in out.reactions}
@@ -309,10 +388,16 @@ def fill_tasks(
                                     resolve_ties=resolve_ties)
         except OptimizationError:
             failed.append(task.id)
+            if verbose:
+                print(f"[{i + 1}/{n_tasks}] {task.id}: FAILED to gap-fill, "
+                      f"{len(added)} total", flush=True)
             continue
         if chosen:
             _add_reference_reactions(out, reference_model, chosen)
             added.extend(chosen)
+        if verbose:
+            print(f"[{i + 1}/{n_tasks}] {task.id}: added {len(chosen)} reaction(s), "
+                  f"{len(added)} total", flush=True)
     if failed:
         warnings.warn(
             f"fill_tasks: {len(failed)} task(s) could not be gap-filled and remain "

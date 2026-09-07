@@ -16,6 +16,13 @@ equal value, and a bounded solve (``time_limit``, ``mip_gap``) may legitimately
 stop at a different one. The band floor is recorded in the baseline alongside
 the run that produced it, so it can be tightened as evidence accumulates rather
 than guessed now.
+
+This exercises ``run_ftinit`` directly (the single-step MILP, not the staged
+``ftinit()`` pipeline) on the raw model with synthetic scores -- the same shape
+of check the classic INIT MILP used to get here, before tINIT was removed.
+``time_limit``/``mip_gap`` are the genome-scale-staged values ``run_ftinit``'s
+own docstring recommends, since nothing here goes through ``prep_init_model``'s
+rescaling.
 """
 from __future__ import annotations
 
@@ -26,7 +33,7 @@ from pathlib import Path
 
 import pytest
 
-from raven_toolbox.init import run_init
+from raven_toolbox.init import run_ftinit
 from raven_toolbox.io import read_yaml_model
 
 pytestmark = [pytest.mark.parity, pytest.mark.slow]
@@ -41,8 +48,8 @@ BASELINE = (
 
 # Bounded so a nightly job cannot run for hours. A solve that hits the limit is
 # still useful -- it is compared as a band, not as an exact answer.
-TIME_LIMIT_SECONDS = 1800.0
-MIP_GAP = 0.001
+TIME_LIMIT_SECONDS = 600.0
+MIP_GAP = 0.005
 
 
 @pytest.fixture(scope="module")
@@ -76,8 +83,14 @@ def extraction(genome_scale_model):
         for i, rxn in enumerate(model.reactions)
     }
     started = time.perf_counter()
-    result = run_init(
-        model.copy(), scores, mip_gap=MIP_GAP, time_limit=TIME_LIMIT_SECONDS
+    # allow_excretion=True: unlike run_init, run_ftinit rewards no connectivity by
+    # default (prod_weight only applies to metabolomics-detected mets, not used here),
+    # so with strict balance and no essential_rxns/tasks a legitimate optimum can be
+    # "everything off" regardless of scores. Net production allowed gives positively
+    # scored reactions a way to actually carry flux.
+    result = run_ftinit(
+        model.copy(), scores, allow_excretion=True,
+        mip_gap=MIP_GAP, time_limit=TIME_LIMIT_SECONDS,
     )
     elapsed = time.perf_counter() - started
     kept = sorted(r.id for r in result.model.reactions)
