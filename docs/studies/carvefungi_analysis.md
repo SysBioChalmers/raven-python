@@ -146,7 +146,7 @@ Cite CarveFungi as the contemporary network-aware compartmentalisation method, b
 ensemble output, versus our predictor-agnostic, transport-minimising, deterministic, multi-
 localisation-sound **assignment** that generalises across kingdoms. Borrow its functionality-coupling
 and confidence-weighting ideas. The clean head-to-head benchmark belongs with `predictLocalization`
-(same task, same lineage — see [the comparison study](predictlocalization_comparison.md)); CarveFungi
+(same task, same lineage — see [the comparison study](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/predictlocalization-comparison.md) (raven-docs)); CarveFungi
 is related work, not a same-objective baseline, and a fair empirical comparison needs its real MILP
 (above), not a cheap emulation.
 

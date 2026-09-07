@@ -2,8 +2,8 @@
 
 Key behaviour:
 
-* clear ``bidirectional`` / ``best_hits_only`` parameters control the hit-filtering
-  strictness (cleaner than a single overloaded "strictness" knob);
+* ``strictness`` controls the hit-filtering policy (bidirectional matching,
+  best-hits-only, or both);
 * GPR rewriting works on cobra's AST, not regex;
 * explicit ``complex_policy`` decides what happens to AND-subunits that lack an
   ortholog (drop, keep, drop-the-reaction);
@@ -108,21 +108,19 @@ def _rewrite_gpr(rxn, ortho: dict, policy: str, model_id: str):
     return None
 
 
-def _strictness_to_params(strictness, bidirectional, best_hits_only, complex_policy, map_direction):
-    """Map RAVEN's strictness 1/2/3 onto the clearer parameters (compat)."""
-    if strictness is None:
-        return bidirectional, best_hits_only, complex_policy, map_direction
+def _strictness_to_flags(strictness: int) -> tuple[bool, bool]:
+    """Map strictness 1/2/3 onto (bidirectional, best_hits_only)."""
     if strictness == 1:
-        return True, False, complex_policy, map_direction
+        return True, False
     if strictness == 2:
-        return False, False, complex_policy, map_direction
+        return False, False
     if strictness == 3:
-        return True, True, complex_policy, map_direction
+        return True, True
     raise ValueError(f"strictness must be 1, 2 or 3, got {strictness}")
 
 
 def _ortholog_map(
-    hits, model_for, model_ids, *, bidirectional, best_hits_only, score, map_direction,
+    hits, model_for, model_ids, *, bidirectional, best_hits_only, map_direction,
     model_genes, max_evalue, min_align_len, min_identity,
 ):
     """Build {model_id: {template_gene: [new_gene, ...]}} from the hits table."""
@@ -133,8 +131,7 @@ def _ortholog_map(
     ]
 
     if best_hits_only:
-        ascending = score == "evalue"
-        h = h.sort_values(score, ascending=ascending)
+        h = h.sort_values("bitscore", ascending=False)
         h = h.groupby(["from_id", "to_id", "from_gene"], sort=False).head(1)
 
     # Directional views, normalised to (model_id, new_gene, template_gene).
@@ -201,34 +198,33 @@ def get_model_from_homology(
     model_for: str,
     *,
     preferred_order=None,
-    bidirectional: bool = True,
-    best_hits_only: bool = False,
+    strictness: int = 1,
     map_direction: str = "new_to_old",
-    score: str = "bitscore",
     complex_policy: str = "flag",
     only_genes_in_models: bool = False,
     max_evalue: float = 1e-30,
     min_align_len: int = 100,
     min_identity: float = 40,
     review_identity: float | None = None,
-    strictness: int | None = None,
 ) -> HomologyResult:
     """Build a draft model for ``model_for`` by transferring reactions from templates.
 
-    ``strictness`` (1/2/3) is a legacy alias for ``bidirectional`` / ``best_hits_only``.
-
     Other parameters that materially change the result:
 
-    * ``bidirectional`` (default True) requires a reciprocal hit — a template
-      gene and a new-organism gene must each be the other's best match —
-      rather than trusting a hit in just one direction.
-    * ``best_hits_only`` (default False) keeps only each gene's single best
-      hit (ranked by ``score``) instead of every hit that passes the filters.
+    * ``strictness`` (default 1) picks the hit-filtering policy:
+
+      - 1: bidirectional — a template gene and a new-organism gene must each
+        be the other's best match, rather than trusting a hit in just one
+        direction.
+      - 2: one-directional — trust a hit found in a single direction, picked
+        by ``map_direction``.
+      - 3: bidirectional and best-hits-only — before matching, each gene is
+        first trimmed to its single best hit (by bitscore) in each
+        direction, then the bidirectional rule is applied.
+
     * ``map_direction`` picks which one-directional search to trust when
-      ``bidirectional`` is False: ``"new_to_old"`` (default, hits found
+      ``strictness`` is 2: ``"new_to_old"`` (default, hits found
       searching from ``model_for``) or ``"old_to_new"``.
-    * ``score`` is the metric used to rank hits for ``best_hits_only``:
-      ``"bitscore"`` (default) or ``"evalue"``.
     * ``complex_policy`` decides what happens to an AND-linked subunit with no
       ortholog: ``"flag"`` (default) keeps the reaction with a placeholder
       gene for later curator review, ``"keep"`` drops just that subunit,
@@ -271,9 +267,7 @@ def get_model_from_homology(
             f"review_identity ({review_identity}) must be below min_identity "
             f"({min_identity}); it exists to catch what min_identity rejects."
         )
-    bidirectional, best_hits_only, complex_policy, map_direction = _strictness_to_params(
-        strictness, bidirectional, best_hits_only, complex_policy, map_direction
-    )
+    bidirectional, best_hits_only = _strictness_to_flags(strictness)
     validate_hits(hits)
 
     model_by_id = {m.id: m for m in models}
@@ -296,7 +290,7 @@ def get_model_from_homology(
 
     ortho = _ortholog_map(
         hits, model_for, model_ids, bidirectional=bidirectional, best_hits_only=best_hits_only,
-        score=score, map_direction=map_direction,
+        map_direction=map_direction,
         model_genes=model_genes, max_evalue=max_evalue, min_align_len=min_align_len,
         min_identity=min_identity,
     )
@@ -314,7 +308,7 @@ def get_model_from_homology(
         # the evidence are different things, and only the first is intended.
         loose_ortho = _ortholog_map(
             hits, model_for, model_ids, bidirectional=bidirectional,
-            best_hits_only=best_hits_only, score=score, map_direction=map_direction,
+            best_hits_only=best_hits_only, map_direction=map_direction,
             model_genes=model_genes, max_evalue=max_evalue,
             min_align_len=min_align_len, min_identity=review_identity,
         )

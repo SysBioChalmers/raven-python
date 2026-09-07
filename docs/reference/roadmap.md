@@ -135,7 +135,7 @@ draft, they suit different situations, and no current guide covers the second at
    calibration). Second, because it carries an infrastructure dependency the homology route
    does not: the KEGG artefacts have to be fetched, so the tutorial has to say clearly what
    is downloaded, how large it is, and what can be skipped. The existing artefact/manifest
-   tooling and [maintaining_kegg_data.md](../maintenance/maintaining_kegg_data.md) are the
+   tooling and [maintaining_kegg_data.md](https://github.com/SysBioChalmers/raven-gecko-parity/blob/main/docs/maintaining_kegg_data.md) (raven-gecko-parity) are the
    starting point.
 
 Then, in order:

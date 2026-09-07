@@ -37,5 +37,6 @@ see the
 Homology and KEGG-HMM reconstruction shell out to **BLAST+ / DIAMOND / HMMER**. These are
 not Python packages; raven-toolbox resolves them from a version-pinned, SHA256-verified
 release registry (see {mod}`raven_toolbox.binaries`). The
-[binary maintenance guide](maintenance/maintaining_binaries.md) covers building and
+[binary maintenance guide](https://github.com/SysBioChalmers/raven-gecko-parity/blob/main/docs/maintaining_binaries.md)
+(raven-gecko-parity) covers building and
 publishing those release ZIPs.

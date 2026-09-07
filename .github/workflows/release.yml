@@ -91,13 +91,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${{ inputs.tag || github.ref_name }}"
+          version="${tag#v}"
+          # PEP 440 pre-release segment (a/b/rc + digits): mark it a GitHub
+          # pre-release instead of "Latest" so a beta never eclipses the last
+          # stable release in the UI.
+          if [[ "$version" =~ (a|b|rc)[0-9]+$ ]]; then
+            latest_flag="--prerelease"
+          else
+            latest_flag="--latest"
+          fi
           # --verify-tag refuses to invent a tag that does not already exist.
           gh release create "$tag" dist/* \
             --repo "${{ github.repository }}" \
-            --title "raven-toolbox ${tag#v}" \
+            --title "raven-toolbox ${version}" \
             --notes-file notes.md \
             --verify-tag \
-            --latest
+            "$latest_flag"
 
   pypi:
     name: pypi
