@@ -82,6 +82,7 @@ def fseof(
     max_fraction: float = 0.9,
     correlation_threshold: float = 0.9,
     flux_eps: float = 1e-6,
+    min_target: float | None = None,
 ) -> FSEOFResult:
     """Run FSEOF for over-production of ``target_rxn``'s product.
 
@@ -97,6 +98,12 @@ def fseof(
         the most cleanly-trending reactions.
     flux_eps:
         Tolerance below which a flux or slope is treated as zero.
+    min_target:
+        Floor of the enforced-flux range, evenly spaced up to the scan's ceiling
+        (``max_fraction`` of the theoretical maximum) in ``n_steps`` steps.
+        Defaults to ``None``, which floors the range at
+        ``max_fraction of the theoretical maximum / n_steps`` instead. Pass e.g.
+        the target reaction's flux at growth-optimum to scan from there.
     """
     with model:  # find the theoretical maximum target flux
         model.objective = target_rxn
@@ -105,7 +112,10 @@ def fseof(
     if target_opt is None or not np.isfinite(target_opt) or target_opt <= flux_eps:
         raise ValueError(f"{target_rxn!r} cannot carry positive flux; nothing to scan.")
     target_max = target_opt * max_fraction
-    levels = [target_max * (i + 1) / n_steps for i in range(n_steps)]
+    if min_target is None:
+        levels = [target_max * (i + 1) / n_steps for i in range(n_steps)]
+    else:
+        levels = list(np.linspace(min_target, target_max, n_steps))
 
     columns: dict[float, pd.Series] = {}
     enforced: list[float] = []
