@@ -240,3 +240,51 @@ def test_ftinit_resolve_ties_matches_oracle_and_is_stable():
     out2 = ftinit(prep, _scores(model), prove_abs_gap=0.05, resolve_ties=True)
     assert {r.id for r in out1.reactions} == set(TEST_MODEL_FTINIT_NO_TASKS)
     assert {r.id for r in out1.reactions} == {r.id for r in out2.reactions}
+
+
+# --------------------------------------------------------------------------- #
+# metabolomics (production-bonus for detected metabolites) — full pipeline.
+# Exercises what run_ftinit's own metabolomics tests cannot: metabolite *name*
+# resolution against prep.ref_model and translation through the linear merge.
+#
+# Reuses testModel rather than a hand-rolled fixture: b[c]/c[c] are produced only by
+# R3 (score -1, reversible) and consumed only by R5 (score 0.5, irreversible) -- degree
+# exactly 2 each, so prep_init_model's linear merge combines R3+R5 into one reaction
+# (their shared metabolites happen to cancel 1:1, collapsing to a plain ac -> ec link;
+# verified directly, not assumed). ``b`` is genuinely produced by R3, a *non-survivor*
+# member of that merge group whenever R5 is picked as the survivor id -- exactly the
+# case _metabolomics_producers' "any member matches" translation exists for. Combined
+# score -0.5: outside testModel's own score-optimal internal loop (R4/R6/R9/R10, worth
+# 8.0 -- see test_init_ftinit.py), so R3/R5 are excluded from the baseline oracle
+# (TEST_MODEL_FTINIT_NO_TASKS) with nothing to do with metabolomics.
+# --------------------------------------------------------------------------- #
+def _merged_producer_prep():
+    model = make_test_model()
+    prep = prep_init_model(model, ext_comp="s")
+    assert prep.group_of["R3"] == prep.group_of["R5"] != 0  # merge actually happened
+    return prep, model
+
+
+def test_metabolomics_name_resolves_through_the_merge():
+    """A detected metabolite produced by a non-survivor merge-group member is still
+    correctly resolved and pulls the (badly-scored, merged) reaction in."""
+    prep, model = _merged_producer_prep()
+    scores = _scores(model)
+
+    baseline = ftinit(prep, scores, fill_gaps=False)
+    assert not ({"R3", "R5"} & {r.id for r in baseline.reactions})
+    assert {r.id for r in baseline.reactions} == set(TEST_MODEL_FTINIT_NO_TASKS)
+
+    boosted = ftinit(prep, scores, fill_gaps=False, metabolomics=["b"], prod_weight=5.0)
+    kept_ids = {r.id for r in boosted.reactions}
+    assert {"R3", "R5"} <= kept_ids  # merge group survives whole (all-or-nothing)
+
+
+def test_metabolomics_unknown_name_warns():
+    """A name matching no metabolite (typo, or a name from an unrelated model) warns."""
+    import pytest
+
+    prep, model = _merged_producer_prep()
+    with pytest.warns(UserWarning, match="matched no metabolite"):
+        ftinit(prep, _scores(model), fill_gaps=False,
+              metabolomics=["not_a_real_metabolite"])

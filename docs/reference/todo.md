@@ -60,8 +60,8 @@ instead of from the source, so the fix has to be structural, not just a correcti
     biomass helpers, growth conditions, batch curation, ΔG/SBO annotation, transport
     evidence, `assign_compartments`, `diff_models`, the KEGG artefact builders.
   * `differences/matlab-only.md` — `ravenCobraWrapper`, the `drawMap` family, MetaCyc
-    reconstruction (flagged for removal upstream), dynamic FBA, ftINIT metabolomics scoring,
-    Excel import, `printFluxes`; each with the reason it is absent and what to use instead.
+    reconstruction (flagged for removal upstream), dynamic FBA, Excel import, `printFluxes`;
+    each with the reason it is absent and what to use instead.
   * `differences/behaviour.md` — **same function, different answer.** The page that does not
     exist anywhere today and is the most valuable one: differing defaults, arguments, return
     shapes, ordering/tie-breaking, and solver dependence. Rows already known from this repo:
@@ -255,9 +255,9 @@ five-times-validated path from a thin wrapper.
   Audit the subsystems with no local API page — `confidence`, `biomass`, `conditions`,
   `curation`, `annotation`, `manifest`, `data`, `binaries` — and add them to
   `docs/reference/api/`.
-* **P1 — State the known functional gaps in one place**: ftINIT metabolomics scoring
-  (`NotImplementedError`), no Excel import, no MetaCyc reconstruction, no dynamic FBA,
-  genome-scale (f)tINIT effectively requiring Gurobi. Feeds `differences/matlab-only.md`.
+* **P1 — State the known functional gaps in one place**: no Excel import, no MetaCyc
+  reconstruction, no dynamic FBA, genome-scale (f)tINIT effectively requiring Gurobi.
+  Feeds `differences/matlab-only.md`.
 * **P1 — Implement or formally drop the 💡 proposals** in `improvements.md` (A4 compartment
   inference from structured metabolite ids, Y4 a first-class home for
   `deltaG`/`confidence_score`, R4 the `remove_metabolites` wrapper review, G7

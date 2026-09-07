@@ -6,6 +6,32 @@ Milestones in the raven-toolbox port. For function-level status see
 
 ## Unreleased
 
+* **New: `ftinit(..., metabolomics=..., prod_weight=...)`, the metabolomics
+  production-bonus.** Previously raised `NotImplementedError`. A detected metabolite
+  (matched by name against `prep.ref_model`, unioned across every metabolite sharing
+  that name — e.g. the same compound in several compartments) gets a continuous `mon`
+  indicator capped by the sum of its producer reactions' own indicators and rewarded
+  `prod_weight` in the objective whenever any producer is on — the incentive to keep (or
+  bring back) a reaction the expression data alone scored badly, purely because it makes
+  the metabolite producible. A zero-score producer is pulled into the problem so it has
+  an indicator to contribute (its own score stays 0); a negative-score producer's
+  indicator gets an added flux floor, so "on" means it genuinely carries flux, not merely
+  that it is permitted to; a reversible negative-score producer gets the same
+  fwd/back-loop exclusivity guard a positive reversible already has, since its indicator
+  now feeds a real reward. A metabolite is silently dropped if any of its producers is
+  already essential (produced regardless); a name matching no metabolite warns rather
+  than silently doing nothing.
+
+  Ported from RAVEN's `ftINITInternalAlg` on its `develop3` branch, not the released
+  `main` — `main` has an unrelated, unrepeated defect there (a fixed big-M that
+  incorrectly caps some reversible/negative reactions above magnitude 100 for standard
+  RAVEN bounds); raven-toolbox never had this because its own `big_m=100` default relies
+  on the model being rescaled first, not on a per-reaction cap. Verified end-to-end
+  against RAVEN's own MILP (`develop3`, real Gurobi solves, matching objective values and
+  flux directions) before porting — see the
+  [`reference_reactions` postmortem](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/ftinit-reference-reactions.md)
+  for why that distinction between RAVEN branches matters here too.
+
 * **New: `utils.generate_new_ids`.** Mints fresh sequential ids after a model's
   existing numbering for a prefix, e.g. `r_0001`, `r_0002`. Ported from RAVEN's
   `manipulation/generateNewIds.m`, quirks included: the existing maximum and its

@@ -57,6 +57,12 @@ zero-cost lever for run-to-run identity.
 Genome-scale (f)tINIT MILPs currently require **Gurobi** for tractable solve times; toy and
 unit-test problems run on GLPK. See the
 [INIT solver benchmark](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/init-solver-benchmark.md)
-(raven-docs). Metabolomics-based scoring is the one piece not yet implemented (raises
-`NotImplementedError`).
+(raven-docs).
 :::
+
+`ftinit()` also takes `metabolomics` (detected metabolite names) and `prod_weight`,
+rewarding a reaction for making a detected metabolite producible even when its own
+expression score would otherwise exclude it — see {func}`raven_toolbox.init.run_ftinit`
+for the MILP mechanics. Ported from RAVEN's `develop3` branch, not `main` — see the
+[`reference_reactions` postmortem](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/ftinit-reference-reactions.md)
+for why that distinction matters here too.

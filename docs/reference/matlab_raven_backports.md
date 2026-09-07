@@ -53,8 +53,3 @@ raven-toolbox.
 * **Dynamic FBA.** Not ported — maintained Python packages already cover it
   ([`dfba`](https://pypi.org/project/dfba/), [`reframed`](https://pypi.org/project/reframed/),
   [`mewpy`](https://pypi.org/project/mewpy/)).
-* **Metabolomics-based scoring in ftINIT** (the 4d.6 production-bonus block).
-  `ftinit(metabolomics=…)` raises `NotImplementedError`. The linear merge eliminates
-  degree-2 detected metabolites, so it would need RAVEN's producer-group-mapping +
-  `mon`/`vnrbm`/`vnrvm`/`vnim` negative-producer force-flux block — the most intricate
-  MILP in ftINIT, for its least-used input.
