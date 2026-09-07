@@ -182,3 +182,37 @@ def test_resolve_ties_gap_fill_breaks_tie_by_id():
     res = fill_tasks(gapped, ref, [task], resolve_ties=True)
     assert res.added_reactions == ["RA"]
     assert not res.failed_tasks
+
+
+def test_reference_model_is_unchanged_and_reusable_after_gap_fill():
+    """reference_model is prep.ref_model in real use -- shared and reused across every
+    sample built from the same PrepData. _gap_fill_task mutates it in place instead of
+    copying it (for speed on a genome-scale model), so it must come back exactly as it
+    went in: no leaked _fill_* variables/constraints, no changed reaction bounds or
+    objective, no leaked Gurobi solver parameters -- and still gap-fill correctly a
+    second time, proving nothing from the first call stuck around to corrupt it."""
+    ref = _reference_without_exchanges()
+    ref.solver.problem.Params.Threads = 3  # distinct from _set_fill_solver's own Threads=1
+
+    bounds_before = {r.id: r.bounds for r in ref.reactions}
+    n_constraints_before = len(ref.constraints)
+    n_variables_before = len(ref.variables)
+    objective_before = str(ref.objective.expression)
+
+    gapped = ref.copy()
+    gapped.remove_reactions(["R7"], remove_orphans=False)
+    res = fill_tasks(gapped, ref, [make_test_task()])
+    assert res.added_reactions == ["R7"]
+
+    assert {r.id: r.bounds for r in ref.reactions} == bounds_before
+    assert len(ref.constraints) == n_constraints_before
+    assert len(ref.variables) == n_variables_before
+    assert str(ref.objective.expression) == objective_before
+    assert ref.solver.problem.Params.Threads == 3
+
+    # ref must still work correctly a second time.
+    gapped_again = ref.copy()
+    gapped_again.remove_reactions(["R7"], remove_orphans=False)
+    res2 = fill_tasks(gapped_again, ref, [make_test_task()])
+    assert res2.added_reactions == ["R7"]
+    assert not res2.failed_tasks
