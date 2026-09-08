@@ -93,7 +93,7 @@ instead of from the source, so the fix has to be structural, not just a correcti
 What exists today: hand-transcribed RAVEN oracles (`tests/tinit_oracles.py`, from
 `tinitTests.m`), the YAML round-trip parity gate (`tests/test_io_yaml_parity.py`), and the
 validation studies (Human-GEM Jaccard 0.975–0.980, yeast, multi-organism) which are
-*reported* in `docs/studies/` but never *asserted* in CI. Nothing regenerates MATLAB output
+*reported* in raven-gecko-parity and raven-docs but never *asserted* in CI. Nothing regenerates MATLAB output
 automatically, so a parity claim cannot fail a build.
 
 * **P0 — Golden-fixture harness.** Committed small inputs plus a MATLAB driver that runs the

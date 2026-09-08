@@ -17,12 +17,18 @@ Conceptual and API reference for raven-toolbox.
   docstrings.
 - **[COBRA vs RAVEN comparison](cobra_raven_comparison.md)** — feature-by-feature comparison
   of the COBRA Toolbox and RAVEN Toolbox, identifying gaps and overlap.
-- **[Evidence-aware transport scoring — design & plan](transport_evidence_scoring.md)** — a cross-repo
-  (RAVEN + raven-toolbox) plan to replace the blanket transport penalty in localisation with
-  transporter-evidence-weighted costs; carrier-general, organism-agnostic, local-binary-based.
-- **[Sound reaction-level multi-localisation — design](multi_localization_design.md)** — why naive
-  multi-localisation admits *dead* placements, and the ε-flux activity-coupling formulation
-  `assign_compartments` uses to forbid them (solver-independent).
+
+:::{admonition} Localisation documentation is in raven-gecko-parity
+:class: note
+
+Compartment assignment is still in development and not at parity with MATLAB
+RAVEN, so its design documents, predictor benchmarks and validation runs are in
+[raven-gecko-parity](https://github.com/SysBioChalmers/raven-gecko-parity/tree/develop/docs/localization)
+rather than on a published site. That includes the evidence-aware transport
+scoring plan, which is scoped to both RAVEN and raven-toolbox, and the
+activity-coupling formulation behind sound reaction-level multi-localisation.
+Per-reaction confidence tracking is there for the same reason.
+:::
 
 :::{admonition} Moved to raven-docs
 :class: note
@@ -44,6 +50,4 @@ matlab_raven_backports
 improvements
 api/index
 cobra_raven_comparison
-transport_evidence_scoring
-multi_localization_design
 ```

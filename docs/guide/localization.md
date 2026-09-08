@@ -16,13 +16,13 @@
    it separately and feed in its output.
 
    **Fuse and tune the evidence.** Since no single source is authoritative (two curated sources
-   agree only ~90% on yeast-GEM — see the [DeepLoc benchmark](../studies/deeploc_yeast_benchmark.md)),
+   agree only ~90% on yeast-GEM — see the [DeepLoc benchmark](https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/deeploc_yeast_benchmark.md)),
    {func}`raven_toolbox.localization.combine_scores` merges several `LocalizationScores` into a
    consensus (agreement reinforced). `load_deeploc` also takes `min_confidence=` (drop unreliable
    low-confidence genes — DeepLoc's probability is well calibrated), `membrane_split={"m":"mm"}`
    (route mitochondrion to its membrane sub-compartment using the transmembrane signal; mito only),
    and `normalise=False` (keep raw probabilities instead of rescaling each gene's best compartment
-   to 1.0 — [accuracy-neutral for assignment](../studies/deeploc_normalisation_benchmark.md), so the
+   to 1.0 — [accuracy-neutral for assignment](https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/deeploc_normalisation_benchmark.md), so the
    default normalises; opt out when you want the calibrated magnitudes, e.g. for triage).
 2. **Predict / apply:** {func}`raven_toolbox.localization.predict_localization` is the MILP
    entry point. Pass the set of reactions to relocate (everything else is pinned); extra
@@ -39,7 +39,7 @@
 
 The defaults and accuracy (including a predictor-noise sweep) are validated against curated
 yeast-GEM in the
-[yeast localization benchmark](../studies/yeast_localization_benchmark.md).
+[yeast localization benchmark](https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/yeast_localization_benchmark.md).
 
 ## Preparing input for a sequence predictor (DeepLoc 2.1)
 

@@ -104,13 +104,6 @@ reference/index
 
 ```{toctree}
 :hidden:
-:caption: Studies & validation
-
-studies/index
-```
-
-```{toctree}
-:hidden:
 :caption: Project
 
 reference/todo
