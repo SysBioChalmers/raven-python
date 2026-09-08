@@ -1,6 +1,6 @@
 # Contributing to raven-toolbox
 
-User documentation lives on [raven-docs](https://github.com/edkerk/raven-docs),
+User documentation lives on [raven-docs](https://raven-docs.readthedocs.io/),
 which covers both this package and MATLAB RAVEN. This file is for working on the
 package itself, and for the maintainer tasks that have nowhere else to live.
 
@@ -45,7 +45,7 @@ consumes the published output.
 
 End users do none of this. They download the published, version-pinned artefacts
 automatically; that side is documented in
-[Downloaded data and binaries](https://github.com/edkerk/raven-docs/blob/main/docs/installation/data-and-binaries.md).
+[Downloaded data and binaries](https://raven-docs.readthedocs.io/en/latest/installation/data-and-binaries/).
 
 Publishing the results, and the versioning model behind the releases, is a shared
 convention rather than a raven-toolbox concern, and is documented in
