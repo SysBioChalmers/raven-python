@@ -183,7 +183,8 @@ def load_deeploc(path: str | Path, *,
     using DeepLoc's ``Soluble`` column), else it stays in the lumen. Keys/values are your model's
     compartment ids (post-``compartment_map``). **Only the mitochondrial split (`m`/`mm`) is supported
     by the evidence** (matrix-vs-membrane AUC ~0.92); DeepLoc does *not* separate ER lumen from
-    membrane, so do not add `er`/`erm`. See ``docs/studies/deeploc_yeast_benchmark.md``.
+    membrane, so do not add `er`/`erm`. See the `DeepLoc yeast-GEM benchmark
+    <https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/deeploc_yeast_benchmark.md>`_ on raven-gecko-parity.
 
     ``keep_raw_confidence=True`` attaches the per-gene *pre-normalisation* top probability to
     :attr:`LocalizationScores.raw_confidence` (normalisation otherwise forces every top to 1.0). It
@@ -193,7 +194,8 @@ def load_deeploc(path: str | Path, *,
     compartment to 1.0. The raw probabilities are calibrated (a 0.97 call is far more reliable than
     a 0.40 one), so leaving them un-normalised lets a downstream assignment weight confident genes
     more heavily; the default ``True`` preserves the RAVEN ``parseScores`` convention and keeps
-    multi-source scales comparable. See ``docs/studies/deeploc_normalisation_benchmark.md``.
+    multi-source scales comparable. See the `DeepLoc normalisation benchmark
+    <https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/deeploc_normalisation_benchmark.md>`_ on raven-gecko-parity.
     """
     raw = pd.read_csv(path)
     wide = _wide_mapped(raw, id_column=None, compartment_map=compartment_map, source=str(path))

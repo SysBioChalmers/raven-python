@@ -16,7 +16,7 @@ Each FASTA header is the **gene id** (ORF / ordered-locus name, e.g. `YNR001C`),
 The **DeepLoc 2.1 results** for these sequences are committed alongside (`yeast-GEM_deeploc_001.csv`,
 `…_002.csv`, `…_003.csv` — one per FASTA chunk; the **slow / high-quality ProtT5** model) and
 benchmarked against yeast-GEM's curated compartments in
-[`docs/studies/deeploc_yeast_benchmark.md`](../../docs/studies/deeploc_yeast_benchmark.md)
+[`deeploc_yeast_benchmark.md`](https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/deeploc_yeast_benchmark.md)
 (regenerate with `scripts/benchmark_deeploc.py --species yeast`).
 
 ## How to use
@@ -58,15 +58,15 @@ prepared for three independent non-yeast eukaryotes:
 * [`aracore/`](aracore/) — *Arabidopsis* AraCore: a fully independent plant model that exercises the
   **chloroplast/plastid** yeast lacked (stringent: plant is far from DeepLoc's training). **Done** —
   results committed (`AraCore_deeploc_00{1,2}.csv`) and benchmarked (80.3%, plastid 89.9%) in
-  [`docs/studies/deeploc_aracore_benchmark.md`](../../docs/studies/deeploc_aracore_benchmark.md)
+  [`deeploc_aracore_benchmark.md`](https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/deeploc_aracore_benchmark.md)
   (`scripts/benchmark_deeploc.py --species aracore`).
 * [`icre1355/`](icre1355/) — *Chlamydomonas* iCre1355: an independent green-alga model with the
   richest organelle set (chloroplast, thylakoid, flagellum, eyespot, …). **Done** — results committed
   (`iCre1355_deeploc_00{1,2,3}.csv`) and benchmarked (chloroplast 78%, cytosol/mito poor) in
-  [`docs/studies/deeploc_icre1355_benchmark.md`](../../docs/studies/deeploc_icre1355_benchmark.md)
+  [`deeploc_icre1355_benchmark.md`](https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/deeploc_icre1355_benchmark.md)
   (`scripts/benchmark_deeploc.py --species icre1355`).
 * [`humangem/`](humangem/) — Human-GEM: a human positive control. **Done** — results committed
   (`Human-GEM_deeploc_00{1..6}.csv`) and benchmarked **gene-level, excluding the 439 DeepLoc2-sourced
   compartments** (84.7% addressable) in
-  [`docs/studies/deeploc_humangem_benchmark.md`](../../docs/studies/deeploc_humangem_benchmark.md)
+  [`deeploc_humangem_benchmark.md`](https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/deeploc_humangem_benchmark.md)
   (`scripts/benchmark_deeploc_humangem.py`).
