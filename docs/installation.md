@@ -2,6 +2,16 @@
 
 raven-toolbox requires **Python ≥ 3.11**.
 
+```bash
+pip install raven-toolbox
+```
+
+That installs the latest stable release. Pre-releases (e.g. the **3.0.0b1** beta) are opt-in:
+
+```bash
+pip install --pre raven-toolbox
+```
+
 ## From a source checkout (development)
 
 ```bash

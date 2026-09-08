@@ -40,9 +40,9 @@ COBRA ecosystem.
 
 ## Status
 
-raven-toolbox is working toward a **3.0** release tracking the upcoming MATLAB RAVEN 3.0
-beta — see the [changelog](CHANGELOG.md) for what has changed since the last stable
-release. It has been validated against MATLAB RAVEN on **Human-GEM** (5 Hart2015
+**raven-toolbox 3.0.0b1** is out — the first beta toward 3.0, tracking the upcoming MATLAB
+RAVEN 3.0 beta ([release notes](https://github.com/SysBioChalmers/raven-toolbox/releases/tag/v3.0.0b1),
+[changelog](CHANGELOG.md)). It has been validated against MATLAB RAVEN on **Human-GEM** (5 Hart2015
 cell-line models, Jaccard 0.975–0.980 — see
 [the Human-GEM validation study](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/humangem-validation.md)
 on raven-docs).
@@ -65,8 +65,14 @@ Two deliberate scope decisions, not pending work:
 pip install raven-toolbox
 ```
 
-The latest stable release is on PyPI. To work against the unreleased code on `develop`
-(including this beta), install from git instead:
+That installs the latest **stable** release. PyPI pre-releases are opt-in, so get the
+3.0.0b1 beta with:
+
+```bash
+pip install --pre raven-toolbox
+```
+
+To work against the unreleased code on `develop` instead, install from git:
 
 ```bash
 git clone https://github.com/SysBioChalmers/raven-toolbox

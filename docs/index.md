@@ -66,7 +66,10 @@ Every public function and class, generated from the docstrings.
 
 ## Status
 
-raven-toolbox has been validated against MATLAB RAVEN on **Human-GEM** (5 Hart2015 cell-line
+**raven-toolbox 3.0.0b1** is out — the first beta toward 3.0, tracking the upcoming MATLAB
+RAVEN 3.0 beta ([release notes](https://github.com/SysBioChalmers/raven-toolbox/releases/tag/v3.0.0b1),
+[changelog](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/CHANGELOG.md)). Install it
+with `pip install --pre raven-toolbox`. It has been validated against MATLAB RAVEN on **Human-GEM** (5 Hart2015 cell-line
 models, Jaccard 0.975–0.980 — see
 [the Human-GEM validation study](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/humangem-validation.md)
 on raven-docs). Two deliberate scope decisions, not pending work: **classic tINIT is not
