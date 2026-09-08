@@ -15,7 +15,7 @@ placement is decided by a flux-free score MILP and the result is confirmed by a 
 materialised model. It also adds optional **gap-fill coupling** (universal-DB candidates added only when
 biomass feasibility needs them) and **sound reaction-level multi-localisation** (a second compartment is
 kept only if a loopless FVA on the materialised model shows it carries real flux — design in
-[multi_localization_design.md](multi_localization_design.md)).
+[multi_localization_design.md](https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/multi_localization_design.md)).
 
 MATLAB RAVEN's default branch has no equivalent (`core/predictLocalization.m` is a
 *simulated-annealing* heuristic: one gene → one compartment, no biomass constraint, no flux gating),
@@ -30,7 +30,7 @@ no longer equivalent — the MATLAB side needs a re-sync, not a fresh port.
 **Re-sync plan.** Rework `assignCompartments.m` to match the current design: drop the fused
 biomass/flux-gating constraints from the placement MILP, add a separate real-FBA certification pass
 (`optimizeProb` on the materialised model) plus the confinement-repair and feedback-loop steps, and the
-multi-localisation flux-activity coupling ([multi_localization_design.md](multi_localization_design.md)
+multi-localisation flux-activity coupling ([multi_localization_design.md](https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/multi_localization_design.md)
 path 2). Verify the `.m` filename does not clash with a COBRA Toolbox function before committing (it
 already exists on `develop3`, so this is a rework in place, not a new file). Tests under `testing/`
 mirroring `tests/test_localization_certify.py`. Reference implementation:
