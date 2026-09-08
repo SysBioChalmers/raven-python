@@ -17,7 +17,8 @@ the only per-organism input is the proteome). :func:`annotate_proteome` runs the
 (Pfam transporter families) + ``diamond`` (TCDB) back-ends against a proteome FASTA;
 :func:`annotate_transporters` takes a pre-computed table instead. Substrate matching is *coarse-first*
 (family → coarse class), with a finer per-substrate ChEBI layer available via ``ontology``. See
-:doc:`/reference/transport_evidence_scoring` for the full design.
+the `evidence-aware transport scoring design
+<https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/transport_evidence_scoring.md>`_ on raven-gecko-parity for the full design.
 """
 from __future__ import annotations
 

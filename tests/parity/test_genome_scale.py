@@ -1,6 +1,6 @@
 """Tier 2 at genome scale: the extraction the studies report, re-run nightly.
 
-The Human-GEM, yeast and multi-organism validations in ``docs/studies/`` are the
+The Human-GEM, yeast and multi-organism validations in raven-gecko-parity and raven-docs are the
 strongest evidence raven-toolbox agrees with MATLAB RAVEN, and they are also the
 least protected: they were measured once, by hand, on a model too large for a
 free runner's solver licence. Nothing re-checks them.
