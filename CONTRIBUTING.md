@@ -2,7 +2,8 @@
 
 User documentation lives on [raven-docs](https://github.com/edkerk/raven-docs),
 which covers both this package and MATLAB RAVEN. This file is for working on the
-package itself, and for the maintainer tasks that have nowhere else to live.
+package itself, and for the maintainer tasks that keep the published artefacts
+current.
 
 ## Development setup
 
@@ -125,7 +126,7 @@ stage and shows a bar over the streaming pass across the large
 
 Needs **HMMER**, **MAFFT** and **CD-HIT** on the `PATH`, or pointed at by
 `RAVEN_PYTHON_HMMBUILD`, `RAVEN_PYTHON_MAFFT` and `RAVEN_PYTHON_CDHIT`.
-`conda install -c bioconda hmmer mafft cd-hit` is the usual way.
+`conda install -c bioconda hmmer mafft cd-hit` installs all three.
 
 > MAFFT and CD-HIT have no native Windows builds, so this step runs on Linux,
 > macOS, or inside WSL2. Keep the whole stack inside WSL2 if you go that way:
@@ -223,9 +224,9 @@ up as `<name>.exe`.
 ### Platforms and licences
 
 Build `linux-x86_64` first, then `macos-arm64`, `macos-x86_64`, `linux-arm64` and
-`windows-x86_64` as capacity allows. A platform with no bundle is not a bug:
-`ensure_binary` raises an error naming the conda package instead, which is the
-documented fallback.
+`windows-x86_64` as capacity allows. A platform with no bundle is a supported
+state, not a defect: `ensure_binary` raises an error naming the conda package,
+which is the documented fallback.
 
 Redistribution terms differ and must be complied with. BLAST+ is NCBI-produced
 and public domain; include its `LICENSE` for provenance. DIAMOND is **GPL-3.0**,
