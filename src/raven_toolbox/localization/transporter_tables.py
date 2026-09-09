@@ -1,7 +1,8 @@
 """Curated transporter-family → coarse-substrate-class tables.
 
 These small hand-maintained tables are the "coarse-first" substrate layer of the evidence-aware
-transport scoring (see :doc:`/reference/transport_evidence_scoring`). They serve two consumers:
+transport scoring (see the `design
+<https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/transport_evidence_scoring.md>`_ on raven-gecko-parity). They serve two consumers:
 
 * ``scripts/build_transporter_data.py`` reads :data:`PFAM_TRANSPORTERS` to know **which** Pfam HMMs to
   fetch (from InterPro) into the bundled transporter HMM database.

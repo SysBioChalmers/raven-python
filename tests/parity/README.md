@@ -108,10 +108,10 @@ It lives here because it protects the same property the parity tiers do.
   first successful nightly run produces one.
 
 Still only *reported*, not enforced: the genome-scale Human-GEM, yeast and
-multi-organism *comparisons against MATLAB RAVEN* in `docs/studies/` (the
-nightly job above is a regression guard on this package, not a cross-language
-check — same distinction as tier 1's baseline), and any small-model extraction
-drift check. A small-model tier-2 test used to cover the latter
+multi-organism *comparisons against MATLAB RAVEN* in raven-gecko-parity and
+raven-docs (the nightly job above is a regression guard on this package, not a
+cross-language check — same distinction as tier 1's baseline), and any small-model
+extraction drift check. A small-model tier-2 test used to cover the latter
 (`test_set_level.py`, against the classic INIT MILP) and was removed along
 with the rest of tINIT; an ftINIT equivalent is open, see
 `docs/reference/todo.md`. Tier 3 has a stated contract and no tests yet for

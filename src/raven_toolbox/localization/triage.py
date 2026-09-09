@@ -20,7 +20,8 @@ Signals (a subset fire per gene):
 * **multi-localised** — the gene was placed in several compartments.
 
 Impact (essentiality / flux) and pathway-level aggregation are v2/v3; this is the cheap, no-solver
-core. See ``docs/studies/deeploc_yeast_benchmark.md`` for where the thresholds come from.
+core. See the `DeepLoc yeast-GEM benchmark
+<https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/deeploc_yeast_benchmark.md>`_ on raven-gecko-parity for where the thresholds come from.
 """
 from __future__ import annotations
 
@@ -36,7 +37,8 @@ from raven_toolbox.localization.scores import LocalizationScores
 __all__ = ["ReviewReport", "triage_localization", "DEEPLOC_COMPARTMENT_TRUST", "confidence_bin"]
 
 #: Per-compartment reliability of a DeepLoc 2.1 organelle call, finetuned on the slow (ProtT5)
-#: yeast-GEM run (organelle-collapsed accuracy; ``docs/studies/localization_finetuning.md``,
+#: yeast-GEM run (organelle-collapsed accuracy; `localisation finetuning
+#: <https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/localization_finetuning.md>`_ on raven-gecko-parity,
 #: regenerate with ``scripts/finetune_localization_yeast.py``). ``mm`` inherits ``m`` because the
 #: mitochondrial split is the one validated routing (AUC ~0.93); the other organelle membranes and
 #: ``ce``/``lp`` stay 0 — DeepLoc cannot reach them reliably. Yeast/DeepLoc-specific — override via

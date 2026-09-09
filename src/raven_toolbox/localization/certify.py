@@ -24,7 +24,8 @@ reaches the growth floor on every medium; otherwise it is returned ``certified=F
 failing media in :attr:`AssignmentProposal.growths`. There is no optimistic certificate — a placement
 that cannot grow is never reported as if it could.
 
-See ``docs/studies/localization_redesign.md`` for the design rationale.
+See the `compartment-assignment redesign
+<https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/localization_redesign.md>`_ on raven-gecko-parity for the design rationale.
 """
 from __future__ import annotations
 
@@ -471,7 +472,8 @@ def _enrich_multilocalization(model, proposal, scores, sc, conditions, default_c
     """Add sound, FVA-validated multi-compartment placements to a certified mono proposal.
 
     The scalable, ghost-free replacement for the in-MILP ``aF``/``aR`` machinery (see
-    ``docs/studies/biological_validation.md`` section 6): propose, for each placed reaction, a second
+    `multi-localisation design
+    <https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/multi_localization_design.md>`_): propose, for each placed reaction, a second
     compartment its gene has DeepLoc evidence for (score ``>= threshold``); materialise every candidate
     as a duplicate; then keep only those a **loopless FVA** shows can carry flux ``>= eps`` in a
     biomass-supporting solution. A dead duplicate (which would harvest a compartment's score for free)
@@ -578,7 +580,8 @@ def assign_compartments(
 
     Placement is decided by a flux-free score MILP, and functionality is a separate,
     materialised-FBA-verified repair (see the module docstring and
-    ``docs/studies/localization_redesign.md``). Notable parameters:
+    the `compartment-assignment redesign
+    <https://github.com/SysBioChalmers/raven-gecko-parity/blob/develop/docs/localization/localization_redesign.md>`_ on raven-gecko-parity). Notable parameters:
 
     ``transport_cost``
         Accepted for signature compatibility but **not used**: the placement master is flux-free and

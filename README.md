@@ -25,9 +25,9 @@ functionality that is unique to RAVEN:
 * **YAML I/O** following the cobra standard, plus geckopy's `ec-*` enzyme-constrained
   fields, and **RAVEN-style Excel** export.
 
-The status of every RAVEN function (ported, cheatsheet-mapped to cobra, or explicitly
-not ported) is documented function-by-function in
-**[docs/reference/migration.md](docs/reference/migration.md)**.
+The status of every RAVEN function (ported, mapped to a cobra equivalent, or
+explicitly not ported) is documented function-by-function in
+**[RAVEN 3 and raven-toolbox](https://raven-docs.readthedocs.io/en/latest/raven3-vs-raven-toolbox/)**.
 
 ## Design principle
 
@@ -114,9 +114,16 @@ Optional:
 
 ## Documentation
 
-The documentation is built with Sphinx (MyST Markdown); the source lives in
-[docs/](docs/) — see [docs/README.md](docs/README.md) for the layout and local-build
-instructions. (A hosted ReadTheDocs site is not yet published.)
+[**raven-docs**](https://raven-docs.readthedocs.io/) is the documentation, and it
+covers MATLAB RAVEN and raven-toolbox side by side: the same task shown in both
+languages, with every example executed on each commit.
+
+This repository carries no prose documentation of its own. The API reference on the
+site is generated from the docstrings here at build time, so a docstring edit
+reaches the site without anything being copied across. Contributor and maintainer
+notes are in [CONTRIBUTING.md](CONTRIBUTING.md); the roadmap, the backlog and the
+MATLAB parity record are in
+[raven-gecko-parity](https://github.com/SysBioChalmers/raven-gecko-parity).
 
 ## Relationship to MATLAB RAVEN
 
