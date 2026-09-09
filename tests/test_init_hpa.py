@@ -1,11 +1,11 @@
-"""Tests for omics/hpa.py — HPA parsing + score adapters (Phase 5)."""
+"""Tests for init/hpa.py — HPA parsing + score adapters (Phase 5)."""
 from __future__ import annotations
 
 from textwrap import dedent
 
 import pytest
 
-from raven_toolbox.omics import (
+from raven_toolbox.init import (
     HPA_LEVEL_SCORES,
     HPAData,
     HPARnaData,

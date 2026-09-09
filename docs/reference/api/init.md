@@ -1,7 +1,8 @@
 # `raven_toolbox.init`
 
 Context-specific model extraction (ftINIT): the staged ftINIT MILP, gene→reaction scoring,
-task-aware gap-filling, and the linear-merge reduction.
+task-aware gap-filling, the linear-merge reduction, and Human Protein Atlas (HPA)
+proteomics/RNA-seq parsing and gene-scoring adapters.
 
 ```{eval-rst}
 .. automodule:: raven_toolbox.init

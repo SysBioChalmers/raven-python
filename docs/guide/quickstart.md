@@ -49,8 +49,7 @@ Extract a tissue/condition-specific model from a reference GEM plus omics-derive
 scores:
 
 ```python
-from raven_toolbox.omics import parse_hpa_rna, rna_gene_scores
-from raven_toolbox.init import ftinit
+from raven_toolbox.init import ftinit, parse_hpa_rna, rna_gene_scores
 
 rna = parse_hpa_rna("rna_tissue.tsv")
 scores = rna_gene_scores(reference_model, rna, tissue="liver")

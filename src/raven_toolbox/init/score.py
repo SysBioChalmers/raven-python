@@ -9,7 +9,7 @@ missing — gets ``no_gene_score`` (default −2). These reaction scores feed
 :func:`raven_toolbox.init.ftinit`.
 
 Upstream — the omics-data → gene-score step (thresholding, expression levels) — lives
-in :mod:`raven_toolbox.omics`; this function takes gene scores as given.
+in :mod:`raven_toolbox.init.hpa`; this function takes gene scores as given.
 """
 from __future__ import annotations
 

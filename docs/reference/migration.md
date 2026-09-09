@@ -80,6 +80,7 @@ standard plus the geckopy enzyme-constrained extension, so ecModels round-trip.
 | `findLeakMetabolite` | ✅ [`gapfilling.find_leak_metabolite`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/gapfilling/leak.py) | Finds a metabolite a model can produce or consume for free (mass-balance leak), independent of gap-filling. |
 | `gapReport` | ✅ [`gapfilling.gap_report`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/gapfilling/report.py) | Summarises which blocked reactions/metabolites a gap-fill run added, removed, or left unresolved. |
 | `scoreModel` | ✅ [`init.score_reactions_from_genes`, `gene_scores_from_expression`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/init/score.py) | RNA-seq scoring is `5·ln(level/ref)`-clamped. |
+| `parseHPA`, `parseHPArna` | ✅ [`init.parse_hpa`, `parse_hpa_rna`, `hpa_gene_scores`, `rna_gene_scores`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/init/hpa.py) | Pandas-tidy DataFrames; scoring adapters reuse `score_reactions_from_genes` (single source of truth for the GPR walk, see the `scoreModel` row above). |
 | `runINIT`, `getINITModel` (tINIT) | ⛔ not ported | tINIT is MATLAB RAVEN's legacy pre-ftINIT algorithm, kept there for backwards compatibility. raven-toolbox is a new implementation with no installed base to carry forward, so it implements only ftINIT. |
 | `ftINIT`, `prepINITModel`, `ftINITInternalAlg`, `getINITSteps` | ✅ [`init.ftinit`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/init/ftinit.py), [`init.prep_init_model`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/init/prep.py), [`init.run_ftinit`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/init/ftinit.py), [`init.get_init_steps`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/init/steps.py) | Staged MILP + linear merge + scaling (`rescaleModelForINIT`). Validated against RAVEN on Human-GEM (Jaccard 0.975–0.980; see [the Human-GEM validation study](https://github.com/edkerk/raven-docs/blob/main/docs/parameter-tuning/studies/humangem-validation.md) on raven-docs). Metabolomics-based scoring (`metabolomics`/`prod_weight`) is now included, ported from RAVEN's `develop3` branch. |
 | `ftINITFillGaps`, `fitTasks` (`gapFillMode` `'preMerged'`) | ✅ [`init.fill_tasks`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/init/taskfill.py) | Task-aware gap-filling within ftINIT; in-place `_feasible` check + bounded fill MILP (`mip_gap`, `time_limit`). |
@@ -95,11 +96,10 @@ standard plus the geckopy enzyme-constrained extension, so ecModels round-trip.
 | `getGeneData`, `downloadGenomeData` | ✅ [`curation.get_gene_data`, `download_genome_data`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/curation/genome_data.py) | Resolves a local GFF3 or an NCBI accession into a gene table; fetches the GFF3 + protein FASTA pair via the NCBI Datasets v2 API. |
 | `processProteinFastaFile` | ✅ [`curation.process_protein_fasta_file`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/curation/process_protein_fasta.py) | Renames a protein FASTA's headers via a gene mapping table (e.g. `get_gene_data`'s own output). |
 
-## Omics, analysis, comparison
+## Analysis, comparison
 
 | RAVEN | raven-toolbox | Notes |
 |---|---|---|
-| `parseHPA`, `parseHPArna`, `scoreModel` | ✅ [`omics.parse_hpa`, `parse_hpa_rna`, `hpa_gene_scores`, `rna_gene_scores`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/omics/hpa.py) | Pandas-tidy DataFrames; scoring adapters reuse `score_reactions_from_genes` (single source of truth for the GPR walk). |
 | `reporterMetabolites` | ✅ [`analysis.reporter_metabolites`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/analysis/reporter.py) | Exact closed-form background replaces RAVEN's Monte-Carlo (RM1 in IMPROVEMENTS). |
 | `FSEOF` | ✅ [`analysis.fseof`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/analysis/fseof.py) | Regression slope + correlation, amplify/knockdown/knockout classes, gene aggregation (FS1–FS4 in IMPROVEMENTS). |
 | `randomSampling` | ✅ [`analysis.sample`](https://github.com/SysBioChalmers/raven-toolbox/blob/develop/src/raven_toolbox/analysis/sampling.py) | Wraps cobra's flux sampling. |
@@ -127,7 +127,7 @@ standard plus the geckopy enzyme-constrained extension, so ecModels round-trip.
 
 * **`ravenCobraWrapper` / RAVEN struct adapter** — cobra is the canonical object; no parallel struct.
 * **`checkModelStruct` struct/type checks** — moot in cobra.
-* **`runDynamicFBA`** — see Omics/analysis row.
+* **`runDynamicFBA`** — see Analysis/comparison row.
 * **`getMetaCycModelForOrganism`** — see Reconstruction row; flagged for upstream removal.
 * **`getPhylDist` per-organism HMM subsampling** — fixed prok90/euk90 libraries make it moot (the distance matrix itself **is** ported, as `reconstruction.kegg.phyl_dist`, for GECKO).
 * **`editMiriam`, `extractMiriam`, `getRxnsInComp`, `getMetsInComp`, `constructEquations`, `getIndexes`** (most), **`setExchangeBounds`**, **most `setParam` modes**, **`getBlastFromExcel` Excel branch** — cobra one-liners; recorded above.

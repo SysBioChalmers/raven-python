@@ -15,7 +15,6 @@ moved to raven-toolbox, what is now a cobra one-liner, and what was intentionall
 io_and_manipulation
 reconstruction
 context_specific
-omics
 tasks_and_gapfilling
 localization
 analysis_and_comparison

@@ -7,8 +7,25 @@ from omics data, with {mod}`raven_toolbox.init`.
 
 Gene scores drive the extraction. Build them from expression with
 {func}`raven_toolbox.init.gene_scores_from_expression` and turn them into reaction scores via
-{func}`raven_toolbox.init.score_reactions_from_genes` (a GPR walk shared with the omics
-adapters — see the [omics guide](omics.md)).
+{func}`raven_toolbox.init.score_reactions_from_genes` (a GPR walk shared with the HPA
+adapters below).
+
+### HPA scoring adapters
+
+{mod}`raven_toolbox.init.hpa` ingests **Human Protein Atlas** data and turns it into the gene
+scores that drive context-specific extraction.
+
+- **Proteomics:** {func}`raven_toolbox.init.parse_hpa` →
+  {func}`raven_toolbox.init.hpa_gene_scores`.
+- **RNA-seq:** {func}`raven_toolbox.init.parse_hpa_rna` →
+  {func}`raven_toolbox.init.rna_gene_scores`.
+
+Both return tidy pandas DataFrames, and the scoring adapters reuse
+{func}`raven_toolbox.init.score_reactions_from_genes` (the same GPR walk used above), so
+HPA-derived scores plug straight into {func}`raven_toolbox.init.ftinit`.
+
+`HPA_LEVEL_SCORES` exposes the categorical-level → score mapping used for the proteomics
+expression levels.
 
 ## ftINIT
 

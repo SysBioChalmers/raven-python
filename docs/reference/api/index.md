@@ -17,7 +17,6 @@ reconstruction
 init
 tasks
 gapfilling
-omics
 localization
 analysis
 comparison
