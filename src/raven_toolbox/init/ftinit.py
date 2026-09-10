@@ -71,6 +71,16 @@ _BIG_M = 100.0   # indicator/direction big-M cap on a *scored* reaction's flux (
 _EXTRACT_SEED = 1234  # RAVEN optimizeProb Seed (default for the ``seed`` parameter)
 _EXTRACT_THREADS = 1  # RAVEN forces single-threaded solving; see the ``threads`` parameter
 
+# A resolve_ties tie-break phase is adopted whether it proves or times out (see
+# _resolve_ties), so it is given a fraction of the primary solve's own budget rather than
+# the full amount again: a phase that would not converge within the full budget has been
+# observed (on genome-scale Human-GEM) to still not converge, only slower; a phase that
+# does converge does so far inside either budget (a pure integer count/id-rank objective
+# with a 0.4 absolute gap). Not independently tuned — see the ftINIT reproducibility study
+# on raven-docs for the experiment that would calibrate this properly instead of halving
+# on general principle.
+_TIE_BREAK_TIME_FRACTION = 0.5
+
 
 def _dbg(msg: str) -> None:
     """Print a diagnostic line to stderr when FTINIT_DEBUG is set (off by default)."""
@@ -525,7 +535,9 @@ def _resolve_ties(opt, prob, obj_expr, indicators, primary, time_limit) -> bool:
         except Exception:  # noqa: BLE001 - GLPK solves exactly; harmless
             pass
         if time_limit is not None:
-            opt.configuration.timeout = int(time_limit)
+            # A fraction of the primary solve's own budget, not the full amount again —
+            # see _TIE_BREAK_TIME_FRACTION.
+            opt.configuration.timeout = max(1, int(time_limit * _TIE_BREAK_TIME_FRACTION))
         opt.optimize()
         _dbg(f"[ftinit] tie-break {label}: status={opt.status} obj={opt.objective.value}")
         # A phase that ends at the time limit still holds an incumbent, and adopting it
@@ -884,8 +896,12 @@ def ftinit(
             print(f"[ftinit] gap-filling {len(prep.tasks)} task(s)", flush=True)
         # The gap-fill MILP is its own problem (RAVEN ftINITFillGaps); it uses RAVEN's
         # fixed per-task 300 s limit and seed, not the main extraction's time_limit.
+        # mutate_in_place=True: `out` is this function's own disposable copy of
+        # prep.ref_model, not exposed anywhere else, so fill_tasks gap-filling it directly
+        # skips a second full copy of the same (genome-scale) model.
         out = fill_tasks(out, prep.ref_model, prep.tasks, rxn_scores=rxn_scores,
-                         resolve_ties=resolve_ties, verbose=verbose).model
+                         resolve_ties=resolve_ties, mutate_in_place=True,
+                         verbose=verbose).model
     if gene_scores is not None:   # prune negative-scoring genes from the GPRs
         out, _ = remove_low_score_genes(out, gene_scores)
     return out
