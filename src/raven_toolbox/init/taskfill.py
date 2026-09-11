@@ -38,6 +38,16 @@ _FILL_SEED = 26           # RAVEN ftINITFillGapsMILP Seed
 _DEFAULT_SCORE = -1.0   # RAVEN: missing scores default to -1 (cost 1)
 _MAX_SCORE = -0.1       # RAVEN min(score, -0.1): every added reaction costs ≥ 0.1
 
+# A resolve_ties tie-break phase is adopted whether it proves or times out (see
+# _resolve_ties_fill), so it is given a fraction of the primary fill's own budget rather
+# than the full amount again: a phase that would not converge within the full budget has
+# been observed (on genome-scale Human-GEM) to still not converge, only slower; a phase
+# that does converge does so far inside either budget (a pure integer count/id-rank
+# objective with a 0.4 absolute gap). Not independently tuned — see the ftINIT
+# reproducibility study on raven-docs for the experiment that would calibrate this
+# properly instead of halving on general principle.
+_TIE_BREAK_TIME_FRACTION = 0.5
+
 
 @dataclass
 class TaskFillResult:
@@ -173,6 +183,17 @@ def _resolve_ties_fill(work, prob, candidates, cost_expr, time_limit) -> list[st
 
     def _phase(objective, label: str) -> bool:
         work.objective = objective
+        if time_limit is not None:
+            # A fraction of the primary fill's own budget, not the full amount again —
+            # see _TIE_BREAK_TIME_FRACTION. Overrides the TimeLimit _set_fill_solver
+            # already put on `work.solver.problem.Params`, so this only ever shortens
+            # the budget for this phase; _gap_fill_task restores the original value
+            # afterward regardless of what a phase sets here.
+            phase_limit = max(1.0, time_limit * _TIE_BREAK_TIME_FRACTION)
+            try:
+                work.solver.problem.Params.TimeLimit = phase_limit
+            except Exception:  # noqa: BLE001 - harmless on other backends
+                work.solver.configuration.timeout = int(phase_limit)
         try:  # integer objective → an absolute gap < 1 proves the optimum cheaply.
             work.solver.problem.Params.MIPGap = 0.0
             work.solver.problem.Params.MIPGapAbs = 0.4
@@ -335,6 +356,7 @@ def fill_tasks(
     time_limit: float | None = _FILL_TIME_LIMIT,
     seed: int = _FILL_SEED,
     resolve_ties: bool = False,
+    mutate_in_place: bool = False,
     verbose: bool = False,
 ) -> TaskFillResult:
     """Add minimum-cost reference reactions so every task is feasible in ``model``.
@@ -359,6 +381,14 @@ def fill_tasks(
     are returned in ``failed_tasks`` **and** raised as a warning — a non-empty list means the
     context model cannot perform those tasks, which callers should not ignore silently.
 
+    ``mutate_in_place`` (default ``False``) skips the initial ``model.copy()`` and gap-fills
+    ``model`` directly, returning it as ``TaskFillResult.model``. Copying a genome-scale,
+    Gurobi-backed model is itself expensive (see :func:`_gap_fill_task`'s docstring for the
+    same lesson applied to ``reference_model``), so a caller that already holds a disposable
+    copy it will not use again — :func:`raven_toolbox.init.ftinit`, whose own ``out`` is
+    exactly that — should pass ``mutate_in_place=True`` to avoid paying for a second one.
+    Leave it ``False`` (the default) whenever the caller still needs ``model`` afterward.
+
     ``verbose`` prints one line per task (added count and running total, matching RAVEN
     ``fitTasks``'s per-task report), silent by default.
     """
@@ -366,24 +396,39 @@ def fill_tasks(
     tasks = list(tasks)
     n_tasks = len(tasks)
 
-    out = model.copy()
+    out = model if mutate_in_place else model.copy()
     added: list[str] = []
     failed: list[str] = []
+
+    # Cost is per reference reaction and independent of which tasks have already run, so
+    # it is computed once rather than re-derived (a fresh sweep of reference_model, with
+    # the score lookup and arithmetic repeated) for every infeasible task. It is safe to
+    # hand _gap_fill_task the full dict, unfiltered by `present`: that function only ever
+    # looks up a cost for a reaction it has already excluded from `present` itself.
+    all_costs = {r.id: -min(scores.get(r.id, _DEFAULT_SCORE), _MAX_SCORE)
+                 for r in reference_model.reactions if not r.boundary}
+
+    present = {r.id for r in out.reactions}
+    name_to_id, comp_to_ids = task_name_maps(out)
+    n_mets = len(out.metabolites)
+
     for i, task in enumerate(tasks):
         if task.should_fail:
             continue
-        name_to_id, comp_to_ids = task_name_maps(out)
+        if len(out.metabolites) != n_mets:
+            # Only a successful gap-fill changes out's permanent metabolite set (task
+            # application is reverted by _feasible's own `with model:`), so this is a
+            # cheap, self-verifying way to skip re-sweeping every metabolite in `out` on
+            # the (common) iterations where nothing changed since the last one.
+            name_to_id, comp_to_ids = task_name_maps(out)
+            n_mets = len(out.metabolites)
         if _feasible(out, task, name_to_id, comp_to_ids):
             if verbose:
                 print(f"[{i + 1}/{n_tasks}] {task.id}: already feasible, "
                       f"0 reaction(s) added, {len(added)} total", flush=True)
             continue
-        # Candidates are the reference reactions not yet in the (growing) model.
-        present = {r.id for r in out.reactions}
-        costs = {r.id: -min(scores.get(r.id, _DEFAULT_SCORE), _MAX_SCORE)
-                 for r in reference_model.reactions if r.id not in present and not r.boundary}
         try:
-            chosen = _gap_fill_task(reference_model, present, task, costs,
+            chosen = _gap_fill_task(reference_model, present, task, all_costs,
                                     time_limit=time_limit, seed=seed,
                                     resolve_ties=resolve_ties)
         except OptimizationError:
@@ -395,6 +440,7 @@ def fill_tasks(
         if chosen:
             _add_reference_reactions(out, reference_model, chosen)
             added.extend(chosen)
+            present.update(chosen)
         if verbose:
             print(f"[{i + 1}/{n_tasks}] {task.id}: added {len(chosen)} reaction(s), "
                   f"{len(added)} total", flush=True)
